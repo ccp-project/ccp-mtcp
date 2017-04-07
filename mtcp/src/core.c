@@ -1224,6 +1224,8 @@ mtcp_free_context(mctx_t mctx)
 
 	if (g_pctx[mctx->cpu] == NULL) return;
 	
+	flush_log_data(mtcp);
+
 	TRACE_DBG("CPU %d: mtcp_destroy_context()\n", mctx->cpu);
 
 	/* close all stream sockets that are still open */
