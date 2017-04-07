@@ -3,6 +3,7 @@
 #include "mtcp.h"
 #include "ip_out.h"
 #include "tcp_in.h"
+#include "tcp_cong.h"
 #include "tcp_stream.h"
 #include "eventpoll.h"
 #include "timer.h"
@@ -299,6 +300,7 @@ SendTCPPacket(struct mtcp_manager *mtcp, tcp_stream *cur_stream,
 	}
 
 	window32 = cur_stream->rcvvar->rcv_wnd >> wscale;
+	window32 = GetCWND(cur_stream->sndvar->mss);
 	tcph->window = htons((uint16_t)MIN(window32, TCP_MAX_WINDOW));
 	/* if the advertised window is 0, we need to advertise again later */
 	if (window32 == 0) {
@@ -380,7 +382,8 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 		goto out;
 	}
 
-	window = MIN(sndvar->cwnd, sndvar->peer_wnd);
+	// window = MIN(sndvar->cwnd, sndvar->peer_wnd);
+	window = GetCWND(sndvar->mss);
 
 	while (1) {
 		seq = cur_stream->snd_nxt;

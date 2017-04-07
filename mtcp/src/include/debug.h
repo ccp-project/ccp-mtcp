@@ -7,6 +7,16 @@
 #include "mtcp.h"
 #include "tcp_in.h"
 
+#define DBGFUNC TRUE
+#define CLWND TRUE
+#define LOSS TRUE
+#define TSTAMP TRUE
+#define RTT TRUE
+#define STATE TRUE
+#define SACK TRUE
+#define CONG TRUE
+#define PKT TRUE
+
 #ifdef DBGTEMP
 
 #define TRACE_TEMP(f, m...) { \
@@ -105,6 +115,12 @@
 #define TRACE_CLWND(f, m...) TRACE_FUNC("CLWND", f, ##m)
 #else
 #define TRACE_CLWND(f, m...)   (void)0
+#endif
+
+#ifdef PKT
+#define TRACE_PKT(f, m...) TRACE_FUNC("PKT", f, ##m)
+#else
+#define TRACE_PKT(f, m...)   (void)0
 #endif
 
 #ifdef LOSS

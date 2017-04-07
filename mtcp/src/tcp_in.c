@@ -3,6 +3,7 @@
 #include "tcp_util.h"
 #include "tcp_in.h"
 #include "tcp_out.h"
+#include "tcp_cong.h"
 #include "tcp_ring_buffer.h"
 #include "eventpoll.h"
 #include "debug.h"
@@ -68,7 +69,8 @@ HandlePassiveOpen(mtcp_manager_t mtcp, uint32_t cur_ts, const struct iphdr *iph,
 	cur_stream->rcvvar->irs = seq;
 	cur_stream->sndvar->peer_wnd = window;
 	cur_stream->rcv_nxt = cur_stream->rcvvar->irs;
-	cur_stream->sndvar->cwnd = 1;
+	//cur_stream->sndvar->cwnd = 1;
+	cur_stream->sndvar->cwnd = GetCWND(cur_stream->sndvar->mss);
 	ParseTCPOptions(cur_stream, cur_ts, (uint8_t *)tcph + TCP_HEADER_LEN, 
 			(tcph->doff << 2) - TCP_HEADER_LEN);
 
@@ -312,10 +314,12 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	uint8_t dup;
 	int ret;
 
-	cwindow = window;
+	TRACE_PKT("TCP_OPT_MSS mss=%u eff_mss= %u\n", sndvar->mss, sndvar->eff_mss);
+	cwindow = window; // NOTE this is the receive window, specified by sender in TCP pkt hdr
 	if (!tcph->syn) {
-		cwindow = cwindow << sndvar->wscale_peer;
+		cwindow = cwindow << sndvar->wscale_peer; // scale window by peer's advertised window scaling factor
 	}
+	TRACE_CLWND("Receiver's scaled window is %u\n", cwindow);
 	right_wnd_edge = sndvar->peer_wnd + cur_stream->rcvvar->snd_wl2;
 
 	/* If ack overs the sending buffer, return */
@@ -347,7 +351,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		sndvar->peer_wnd = cwindow;
 		cur_stream->rcvvar->snd_wl1 = seq;
 		cur_stream->rcvvar->snd_wl2 = ack_seq;
-#if 0
+#if 1
 		TRACE_CLWND("Window update. "
 				"ack: %u, peer_wnd: %u, snd_nxt-snd_una: %u\n", 
 				ack_seq, cwindow, cur_stream->snd_nxt - sndvar->snd_una);
@@ -498,10 +502,11 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 				if (new_cwnd > sndvar->cwnd) {
 					sndvar->cwnd = new_cwnd;
 				}
-				//TRACE_CONG("congestion avoidance cwnd: %u, ssthresh: %u\n", 
-				//		sndvar->cwnd, sndvar->ssthresh);
+				TRACE_CONG("congestion avoidance cwnd: %u, ssthresh: %u\n", 
+						sndvar->cwnd, sndvar->ssthresh);
 			}
 		}
+		sndvar->cwnd = GetCWND(sndvar->mss);
 
 		if (SBUF_LOCK(&sndvar->write_lock)) {
 			if (errno == EDEADLK)
@@ -541,6 +546,8 @@ ProcessTCPPayload(mtcp_manager_t mtcp, tcp_stream *cur_stream,
 	struct tcp_recv_vars *rcvvar = cur_stream->rcvvar;
 	uint32_t prev_rcv_nxt;
 	int ret;
+
+	TRACE_PKT("Processing payload of seq %lu\n", seq);
 
 	/* if seq and segment length is lower than rcv_nxt, ignore and send ack */
 	if (TCP_SEQ_LT(seq + payloadlen, cur_stream->rcv_nxt)) {
@@ -851,6 +858,7 @@ Handle_TCP_ST_ESTABLISHED (mtcp_manager_t mtcp, uint32_t cur_ts,
 		return;
 	}
 
+
 	if (payloadlen > 0) {
 		if (ProcessTCPPayload(mtcp, cur_stream, 
 				cur_ts, payload, seq, payloadlen)) {
@@ -1151,6 +1159,7 @@ ProcessTCPPacket(mtcp_manager_t mtcp,
 	int ret;
 	int rc = -1;
 
+	TRACE_PKT("Got packet with seq=%lu ack_seq=%lu payload_len=%d\n", seq, ack_seq, payloadlen);
 	/* Check ip packet invalidation */	
 	if (ip_len < ((iph->ihl + tcph->doff) << 2))
 		return ERROR;
