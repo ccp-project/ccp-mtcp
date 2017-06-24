@@ -53,6 +53,10 @@ Example Experiment
 Current Observations
 ====================
 
+(Sender running mTCP over DPDK on a MLX4 NIC) 
+(Receiver using kernel's TCP stack)
+(Both machines running Ubuntu 16.04, Kernel 4.4)
+
 1. CWND=20,000 DELAY=20ms SEND_BYTES=1000000 (1MB)
 
 @sender:
