@@ -4,5 +4,5 @@
 #include "debug.h"
 
 uint32_t GetCWND(uint16_t mss) {
-	return 100000;
+	return 20000;
 }

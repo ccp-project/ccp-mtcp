@@ -203,7 +203,7 @@ int main(int argc, char **argv)
 	// Send done (anything other than 0x90)
 	memset(buf, 0x96, sizeof(char) * BUF_LEN);
 	mtcp_write(ctx->mctx, sockfd, buf, 1);
-
+	goto stop_timer;
 	// Poll for "OK" from receiver
 	printf("Done writing... polling...\n");
 	events_ready = mtcp_epoll_wait(ctx->mctx, ep_id, events, mcfg.max_num_buffers, -1);
