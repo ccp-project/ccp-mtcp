@@ -8,14 +8,13 @@
 #include "tcp_in.h"
 
 #define DBGFUNC TRUE
-#define CLWND TRUE
 #define LOSS TRUE
-#define TSTAMP TRUE
 #define RTT TRUE
 #define STATE TRUE
 #define SACK TRUE
 #define CONG TRUE
 #define PKT TRUE
+#define CCP TRUE
 
 #ifdef DBGTEMP
 
@@ -211,6 +210,12 @@
 #define TRACE_API(f, m...) TRACE_FUNC("API", f, ##m)
 #else
 #define TRACE_API(f, m...) (void)0
+#endif
+
+#ifdef CCP
+#define TRACE_CCP(f, m...) TRACE_FUNC("CCP", f, ##m)
+#else
+#define TRACE_CCP(f, m...) (void)0
 #endif
 
 #ifdef DBGFUNC

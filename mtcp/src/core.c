@@ -61,6 +61,7 @@ struct log_thread_context *g_logctx[MAX_CPUS] = {0};
 /*----------------------------------------------------------------------------*/
 static pthread_t g_thread[MAX_CPUS] = {0};
 static pthread_t log_thread[MAX_CPUS]  = {0};
+static pthread_t ccp_thread[MAX_CPUS] = {0};
 /*----------------------------------------------------------------------------*/
 static sem_t g_init_sem[MAX_CPUS];
 static int running[MAX_CPUS] = {0};
@@ -1053,6 +1054,31 @@ InitializeMTCPManager(struct mtcp_thread_context* ctx)
 }
 /*----------------------------------------------------------------------------*/
 static void *
+CCPRecvLoopThread(void * arg)
+{
+	mtcp_manager_t mtcp = (mtcp_manager_t)arg;
+	mtcp_thread_context_t ctx = mtcp->ctx;
+	int cpu = ctx->cpu;
+	tcp_stream lookup_stream;
+	tcp_stream *stream;
+
+	mtcp_core_affinitize(cpu);
+
+	TRACE_CCP("ccp recvloop thread started on cpu %d\n", cpu);
+	
+	// TODO:CCP
+	// listen on unix domain socket /tmp/ccp-out/CPU
+	// while(1) {
+	// msg = recv_from_socket
+	// lookup_stream.id = msg->sid;
+	// stream = StreamHTSearch(mtcp->tcp_sid_table, &lookup_stream);
+	// stream->sndvar->cwnd = msg->cwnd;
+	// }
+
+	return 0;
+}
+/*----------------------------------------------------------------------------*/
+static void *
 MTCPRunThread(void *arg)
 {
 	mctx_t mctx = (mctx_t)arg;
@@ -1111,6 +1137,14 @@ MTCPRunThread(void *arg)
 	/* remember this context pointer for signal processing */
 	g_pctx[cpu] = ctx;
 	mlockall(MCL_CURRENT);
+
+#if USE_CCP
+	if (pthread_create(&ccp_thread[cpu],
+				NULL, CCPRecvLoopThread, (void *)mtcp) != 0) {
+		TRACE_ERROR("pthread_create of ccp receive thread failed!\n");
+		return NULL;
+	}
+#endif
 
 	// attach (nic device, queue)
 	working = AttachDevice(ctx);
@@ -1288,6 +1322,11 @@ mtcp_free_context(mctx_t mctx)
 	pthread_join(log_thread[ctx->cpu], NULL);
 	fclose(mtcp->log_fp);
 	TRACE_LOG("Log thread %d joined.\n", mctx->cpu);
+	
+	pthread_join(ccp_thread[ctx->cpu], NULL);
+	close(mtcp->from_ccp_fd);
+	close(mtcp->to_ccp_fd);
+	TRACE_CCP("CCP thread %d joined.\n", mctx->cpu);
 
 	if (mtcp->connectq) {
 		DestroyStreamQueue(mtcp->connectq);

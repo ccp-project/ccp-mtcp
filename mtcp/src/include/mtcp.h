@@ -49,6 +49,7 @@
 #define USE_SPIN_LOCK		TRUE
 #define INTR_SLEEPING_MTCP	TRUE
 #define PROMISCUOUS_MODE	TRUE
+#define USE_CCP	TRUE
 
 /* blocking api became obsolete */
 #define BLOCKING_SUPPORT	FALSE

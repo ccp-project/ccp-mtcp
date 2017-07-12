@@ -69,8 +69,7 @@ HandlePassiveOpen(mtcp_manager_t mtcp, uint32_t cur_ts, const struct iphdr *iph,
 	cur_stream->rcvvar->irs = seq;
 	cur_stream->sndvar->peer_wnd = window;
 	cur_stream->rcv_nxt = cur_stream->rcvvar->irs;
-	//cur_stream->sndvar->cwnd = 1;
-	cur_stream->sndvar->cwnd = GetCWND(cur_stream->sndvar->mss);
+	cur_stream->sndvar->cwnd = 1;
 	ParseTCPOptions(cur_stream, cur_ts, (uint8_t *)tcph + TCP_HEADER_LEN, 
 			(tcph->doff << 2) - TCP_HEADER_LEN);
 
@@ -394,6 +393,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 
 	/* Fast retransmission */
 	if (dup && cur_stream->rcvvar->dup_acks == 3) {
+		// TODO:CCP send_drop(cur_stream->id)
 		TRACE_LOSS("Triple duplicated ACKs!! ack_seq: %u\n", ack_seq);
 		if (TCP_SEQ_LT(ack_seq, cur_stream->snd_nxt)) {
 			TRACE_LOSS("Reducing snd_nxt from %u to %u\n", 
@@ -487,7 +487,12 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 			TRACE_RTT("NOT IMPLEMENTED.\n");
 		}
 
+		// NOTE:CCP this is not needed for now because the cwnd is dictated entirely
+		// by the ccp. if we want safe defaults / backups, we may want to reuse this
+		// logic to ensure the cwnd grows even if it can't hear from the ccp
+		//
 		/* Update congestion control variables */
+		/* 
 		if (cur_stream->state >= TCP_ST_ESTABLISHED) {
 			if (sndvar->cwnd < sndvar->ssthresh) {
 				if ((sndvar->cwnd + sndvar->mss) > sndvar->cwnd) {
@@ -506,7 +511,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 						sndvar->cwnd, sndvar->ssthresh);
 			}
 		}
-		sndvar->cwnd = GetCWND(sndvar->mss);
+		*/
 
 		if (SBUF_LOCK(&sndvar->write_lock)) {
 			if (errno == EDEADLK)
@@ -531,6 +536,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		SBUF_UNLOCK(&sndvar->write_lock);
 		UpdateRetransmissionTimer(mtcp, cur_stream, cur_ts);
 	}
+
+	// TODO:CCP send_ack(cur_stream->id, ack_seq, mrtt)
+	// mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd);
 
 	UNUSED(ret);
 }
@@ -1196,8 +1204,11 @@ ProcessTCPPacket(mtcp_manager_t mtcp,
 		/* not found in flow table */
 		cur_stream = CreateNewFlowHTEntry(mtcp, cur_ts, iph, ip_len, tcph, 
 				seq, ack_seq, payloadlen, window);
-		if (!cur_stream)
+		if (!cur_stream) {
 			return TRUE;
+		} else {
+			// TODO:CCP send_create(cur_stream->id,cur_stream->seq)
+		}
 	}
 
 	/* Validate sequence. if not valid, ignore the packet */
