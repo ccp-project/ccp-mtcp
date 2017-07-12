@@ -43,9 +43,9 @@ ParseTCPOptions(tcp_stream *cur_stream,
 				cur_stream->sndvar->wscale_peer = *(tcpopt + i++);
 			} else if (opt == TCP_OPT_SACK_PERMIT) {
 				cur_stream->sack_permit = TRUE;
-				TRACE_SACK("Remote SACK permited.\n");
+				//TRACE_SACK("Remote SACK permited.\n");
 			} else if (opt == TCP_OPT_TIMESTAMP) {
-				TRACE_TSTAMP("Saw peer timestamp!\n");
+				//TRACE_TSTAMP("Saw peer timestamp!\n");
 				cur_stream->saw_timestamp = TRUE;
 				cur_stream->rcvvar->ts_recent = ntohl(*(uint32_t *)(tcpopt + i));
 				cur_stream->rcvvar->ts_last_ts_upd = cur_ts;
