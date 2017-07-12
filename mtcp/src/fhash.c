@@ -10,8 +10,9 @@
 #include "debug.h"
 #include "fhash.h"
 
-#define IS_FLOW_TABLE(x)	(x == HashFlow)
+#define IS_FLOW_TABLE(x)		(x == HashFlow)
 #define IS_LISTEN_TABLE(x)	(x == HashListener)
+#define IS_SID_TABLE(x) 		(x == HashSID)
 /*----------------------------------------------------------------------------*/
 struct hashtable * 
 CreateHashtable(unsigned int (*hashfn) (const void *), // key function
@@ -30,7 +31,7 @@ CreateHashtable(unsigned int (*hashfn) (const void *), // key function
 	ht->bins = bins;
 
 	/* creating bins */
-	if (IS_FLOW_TABLE(hashfn)) {
+	if (IS_FLOW_TABLE(hashfn) || IS_SID_TABLE(hashfn)) {
 		ht->ht_table = calloc(bins, sizeof(hash_bucket_head));
 		if (!ht->ht_table) {
 			TRACE_ERROR("calloc: CreateHashtable bins!\n");
@@ -118,6 +119,22 @@ StreamHTSearch(struct hashtable *ht, const void *it)
 
 	UNUSED(idx);
 	return NULL;
+}
+void *
+StreamHTFind(struct hashtable *ht)
+{
+	tcp_stream *walk;
+	hash_bucket_head *head;
+
+	for (int i = 0; i < NUM_BINS_FLOWS; i++) {
+		head = &ht->ht_table[i];
+		TAILQ_FOREACH(walk, head, rcvvar->he_link) {
+			return walk;
+		}
+	}
+
+	return NULL;
+	
 }
 /*----------------------------------------------------------------------------*/
 unsigned int

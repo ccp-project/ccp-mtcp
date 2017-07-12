@@ -44,6 +44,7 @@ void DestroyHashtable(struct hashtable *ht);
 int StreamHTInsert(struct hashtable *ht, void *);
 void* StreamHTRemove(struct hashtable *ht, void *);
 void *StreamHTSearch(struct hashtable *ht, const void *);
+void *StreamHTFind(struct hashtable *ht);
 unsigned int HashListener(const void *hbo_port_ptr);
 int EqualListener(const void *hbo_port_ptr1, const void *hbo_port_ptr2);
 int ListenerHTInsert(struct hashtable *ht, void *);

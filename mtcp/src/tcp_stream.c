@@ -88,6 +88,12 @@ HashFlow(const void *f)
 	return hash & (NUM_BINS_FLOWS - 1);
 #endif
 }
+unsigned int
+HashSID(const void *f)
+{
+	tcp_stream *flow = (tcp_stream *)f;
+	return (flow->id % (NUM_BINS_FLOWS - 1));
+}
 /*---------------------------------------------------------------------------*/
 int
 EqualFlow(const void *f1, const void *f2)
@@ -99,6 +105,12 @@ EqualFlow(const void *f1, const void *f2)
 			flow1->sport == flow2->sport &&
 			flow1->daddr == flow2->daddr &&
 			flow1->dport == flow2->dport);
+}
+/*---------------------------------------------------------------------------*/
+int
+EqualSID(const void *f1, const void *f2)
+{
+	return (((tcp_stream *)f1)->id == ((tcp_stream *)f2)->id);
 }
 /*---------------------------------------------------------------------------*/
 inline void 
@@ -248,6 +260,14 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 	if (ret < 0) {
 		TRACE_ERROR("Stream %d: "
 				"Failed to insert the stream into hash table.\n", stream->id);
+		MPFreeChunk(mtcp->flow_pool, stream);
+		pthread_mutex_unlock(&mtcp->ctx->flow_pool_lock);
+		return NULL;
+	}
+	ret = StreamHTInsert(mtcp->tcp_sid_table, stream);
+	if (ret < 0) {
+		TRACE_ERROR("Stream %d: "
+				"Failed to insert the stream into SID lookup table.\n", stream->id);
 		MPFreeChunk(mtcp->flow_pool, stream);
 		pthread_mutex_unlock(&mtcp->ctx->flow_pool_lock);
 		return NULL;

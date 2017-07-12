@@ -192,6 +192,7 @@ struct mtcp_manager
 	sb_manager_t rbm_snd;
 	rb_manager_t rbm_rcv;
 	struct hashtable *tcp_flow_table;
+	struct hashtable *tcp_sid_table;
 
 	uint32_t s_index:24;		/* stream index */
 	socket_map_t smap;
