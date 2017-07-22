@@ -19,26 +19,32 @@ MY_PORT = 50000 + 42
 
 BUFSIZE = 8192
 
-
 def server(port):
     if len(sys.argv) > 1:
         port = eval(port)
     else:
         usage()
     s = socket(AF_INET, SOCK_STREAM)
-    s.bind(('', port))
+    s.bind(('10.1.1.6', port))
     s.listen(1)
     print 'Server ready...'
     while 1:
         conn, (host, remoteport) = s.accept()
+        recvd = 0
+        start = time.time()
         while 1:
             data = conn.recv(BUFSIZE)
-            if not data or repr(data[-1]) != '0x90':
+            recvd += len(data)
+            #print recvd, data[-1] == 0x96 if len(data) > 0 else ""
+            if not data or repr(data[-1]) == '\x96':
                 break
             del data
+        print "DONE"
         conn.send('OK\n')
         conn.close()
-        print 'Done with', host, 'port', remoteport
+        end = time.time()
+        thru = ((recvd / (end-start)) * 8) / 1000000
+        print "Done with {}:{}, recvd: {}, time: {}, thru: {}Mbps".format(host,remoteport,recvd,(end-start),thru)
 
 def usage():
     sys.stdout = sys.stderr
