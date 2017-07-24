@@ -32,7 +32,7 @@
 #define IP_RANGE 1
 #define MAX_IP_STR_LEN 16
 
-#define BUF_SIZE (8*1024)
+#define BUF_SIZE (32*1024)
 
 #define CALC_MD5SUM FALSE
 
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
   int connected = 0;
 	printf("Connection created. Sending...\n");
 	while (bytes_to_send > 0) {
-		wrote = mtcp_write(ctx->mctx, sockfd, buf, BUF_LEN);
+		wrote = mtcp_write(ctx->mctx, sockfd, buf, (bytes_to_send < BUF_LEN ? bytes_to_send : BUF_LEN));
 		if (wrote > 0 && connected == 0) {
 			gettimeofday(&t1, NULL); 
 			connected = 1;
