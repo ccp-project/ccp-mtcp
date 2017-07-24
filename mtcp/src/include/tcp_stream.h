@@ -191,6 +191,10 @@ typedef struct tcp_stream
 	
 	uint32_t last_active_ts;		/* ts_last_ack_sent or ts_last_ts_upd */
 
+#if USE_CCP
+	struct ccp_vars *ccp;
+#endif
+	
 } tcp_stream;
 
 extern inline char *

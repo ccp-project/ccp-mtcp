@@ -3,7 +3,6 @@
 #include "mtcp.h"
 #include "ip_out.h"
 #include "tcp_in.h"
-#include "tcp_cong.h"
 #include "tcp_stream.h"
 #include "eventpoll.h"
 #include "timer.h"
@@ -382,6 +381,9 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 	}
 
 	window = MIN(sndvar->cwnd, sndvar->peer_wnd);
+	if (cur_ts % 10 == 3) {
+		TRACE_RTT("cwnd=%d window=%d\n", sndvar->cwnd, window);
+	}
 
 	while (1) {
 		seq = cur_stream->snd_nxt;

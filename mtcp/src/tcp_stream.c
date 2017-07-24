@@ -8,6 +8,9 @@
 #include "ip_out.h"
 #include "timer.h"
 #include "debug.h"
+#if USE_CCP
+#include "ccp.h"
+#endif
 
 #define TCP_MAX_SEQ 4294967295
 
@@ -247,6 +250,16 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 		pthread_mutex_unlock(&mtcp->ctx->flow_pool_lock);
 		return NULL;
 	}
+#if USE_CCP
+	stream->ccp = (struct ccp_vars *)MPAllocateChunk(mtcp->cv_pool);
+	if (!stream->ccp) {
+		MPFreeChunk(mtcp->sv_pool, stream->sndvar);
+		MPFreeChunk(mtcp->rv_pool, stream->rcvvar);
+		MPFreeChunk(mtcp->flow_pool, stream);
+		pthread_mutex_unlock(&mtcp->ctx->flow_pool_lock);
+	}
+	memset(stream->ccp, 0, sizeof(struct ccp_vars));
+#endif
 	memset(stream->rcvvar, 0, sizeof(struct tcp_recv_vars));
 	memset(stream->sndvar, 0, sizeof(struct tcp_send_vars));
 
@@ -353,6 +366,10 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 			sa[0], sa[1], sa[2], sa[3], ntohs(stream->sport), 
 			da[0], da[1], da[2], da[3], ntohs(stream->dport), 
 			stream->sndvar->iss);
+
+#if USE_CCP
+	ccp_create(mtcp, stream);
+#endif
 
 	UNUSED(da);
 	UNUSED(sa);

@@ -49,7 +49,7 @@
 #define USE_SPIN_LOCK		TRUE
 #define INTR_SLEEPING_MTCP	TRUE
 #define PROMISCUOUS_MODE	TRUE
-#define USE_CCP	TRUE
+#define USE_CCP	FALSE
 
 /* blocking api became obsolete */
 #define BLOCKING_SUPPORT	FALSE
@@ -187,6 +187,9 @@ struct mtcp_manager
 	mem_pool_t flow_pool;		/* memory pool for tcp_stream */
 	mem_pool_t rv_pool;			/* memory pool for recv variables */
 	mem_pool_t sv_pool;			/* memory pool for send variables */
+#if USE_CCP
+	mem_pool_t cv_pool;			/* memory pool for ccp variables */
+#endif
 	mem_pool_t mv_pool;			/* memory pool for monitor variables */
 
 	//mem_pool_t socket_pool;
@@ -267,6 +270,11 @@ struct mtcp_manager
 	struct time_stat rtstat;
 #endif /* NETSTAT */
 	struct io_module_func *iom;
+
+#if USE_CCP
+	int from_ccp;
+	int to_ccp;
+#endif
 };
 /*----------------------------------------------------------------------------*/
 typedef struct mtcp_manager* mtcp_manager_t;

@@ -3,12 +3,14 @@
 #include "tcp_util.h"
 #include "tcp_in.h"
 #include "tcp_out.h"
-#include "tcp_cong.h"
 #include "tcp_ring_buffer.h"
 #include "eventpoll.h"
 #include "debug.h"
 #include "timer.h"
 #include "ip_in.h"
+#if USE_CCP
+#include "ccp.h"
+#endif
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
@@ -313,7 +315,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	uint8_t dup;
 	int ret;
 
-	TRACE_PKT("TCP_OPT_MSS mss=%u eff_mss= %u\n", sndvar->mss, sndvar->eff_mss);
+	//TRACE_PKT("TCP_OPT_MSS mss=%u eff_mss= %u\n", sndvar->mss, sndvar->eff_mss);
 	cwindow = window; // NOTE this is the receive window, specified by sender in TCP pkt hdr
 	if (!tcph->syn) {
 		cwindow = cwindow << sndvar->wscale_peer; // scale window by peer's advertised window scaling factor
@@ -393,7 +395,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 
 	/* Fast retransmission */
 	if (dup && cur_stream->rcvvar->dup_acks == 3) {
-		// TODO:CCP send_drop(cur_stream->id)
+#if USE_CCP
+		ccp_notify_drop(mtcp, cur_stream, DROP_DUPACK);
+#endif
 		TRACE_LOSS("Triple duplicated ACKs!! ack_seq: %u\n", ack_seq);
 		if (TCP_SEQ_LT(ack_seq, cur_stream->snd_nxt)) {
 			TRACE_LOSS("Reducing snd_nxt from %u to %u\n", 
@@ -410,6 +414,8 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 			cur_stream->snd_nxt = ack_seq;
 		}
 
+#if USE_CCP
+#else
 		/* update congestion control variables */
 		/* ssthresh to half of min of cwnd and peer wnd */
 		sndvar->ssthresh = MIN(sndvar->cwnd, sndvar->peer_wnd) / 2;
@@ -419,6 +425,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		sndvar->cwnd = sndvar->ssthresh + 3 * sndvar->mss;
 		TRACE_CONG("Fast retransmission. cwnd: %u, ssthresh: %u\n", 
 				sndvar->cwnd, sndvar->ssthresh);
+#endif
 
 		/* count number of retransmissions */
 		if (sndvar->nrtx < TCP_MAX_RTX) {
@@ -430,12 +437,15 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		AddtoSendList(mtcp, cur_stream);
 
 	} else if (cur_stream->rcvvar->dup_acks > 3) {
+#if USE_CCP
+#else
 		/* Inflate congestion window until before overflow */
 		if ((uint32_t)(sndvar->cwnd + sndvar->mss) > sndvar->cwnd) {
 			sndvar->cwnd += sndvar->mss;
 			TRACE_CONG("Dupack cwnd inflate. cwnd: %u, ssthresh: %u\n", 
 					sndvar->cwnd, sndvar->ssthresh);
 		}
+#endif
 	}
 
 #if TCP_OPT_SACK_ENABLED
@@ -491,8 +501,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		// by the ccp. if we want safe defaults / backups, we may want to reuse this
 		// logic to ensure the cwnd grows even if it can't hear from the ccp
 		//
+#if USE_CCP
+#else
 		/* Update congestion control variables */
-		/* 
 		if (cur_stream->state >= TCP_ST_ESTABLISHED) {
 			if (sndvar->cwnd < sndvar->ssthresh) {
 				if ((sndvar->cwnd + sndvar->mss) > sndvar->cwnd) {
@@ -511,7 +522,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 						sndvar->cwnd, sndvar->ssthresh);
 			}
 		}
-		*/
+#endif
 
 		if (SBUF_LOCK(&sndvar->write_lock)) {
 			if (errno == EDEADLK)
@@ -535,10 +546,14 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 
 		SBUF_UNLOCK(&sndvar->write_lock);
 		UpdateRetransmissionTimer(mtcp, cur_stream, cur_ts);
-	}
 
-	// TODO:CCP send_ack(cur_stream->id, ack_seq, mrtt)
-	// mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd);
+		
+#if USE_CCP
+		// TODO:CCP rmlen does not account for rtx!
+		uint32_t mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd;
+		ccp_cong_control(mtcp, cur_stream, ack_seq, mrtt, rmlen);
+#endif
+	}
 
 	UNUSED(ret);
 }
@@ -1206,8 +1221,6 @@ ProcessTCPPacket(mtcp_manager_t mtcp,
 				seq, ack_seq, payloadlen, window);
 		if (!cur_stream) {
 			return TRUE;
-		} else {
-			// TODO:CCP send_create(cur_stream->id,cur_stream->seq)
 		}
 	}
 

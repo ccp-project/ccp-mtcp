@@ -9,6 +9,9 @@
 #include <signal.h>
 #include <assert.h>
 #include <sched.h>
+#if USE_CCP
+#include <sys/un.h>
+#endif
 
 #include "cpu.h"
 #include "ps.h"
@@ -28,6 +31,9 @@
 #include "ip_out.h"
 #include "timer.h"
 #include "debug.h"
+#if USE_CCP
+#include "ccp.h"
+#endif
 
 #ifndef DISABLE_DPDK
 /* for launching rte thread */
@@ -61,7 +67,9 @@ struct log_thread_context *g_logctx[MAX_CPUS] = {0};
 /*----------------------------------------------------------------------------*/
 static pthread_t g_thread[MAX_CPUS] = {0};
 static pthread_t log_thread[MAX_CPUS]  = {0};
+#if USE_CCP
 static pthread_t ccp_thread[MAX_CPUS] = {0};
+#endif
 /*----------------------------------------------------------------------------*/
 static sem_t g_init_sem[MAX_CPUS];
 static int running[MAX_CPUS] = {0};
@@ -941,6 +949,13 @@ InitializeMTCPManager(struct mtcp_thread_context* ctx)
 		CTRACE_ERROR("Failed to allocate tcp send variable pool.\n");
 		return NULL;
 	}
+#if USE_CCP
+	mtcp->cv_pool = MPCreate(sizeof(struct ccp_vars),
+			sizeof(struct ccp_vars) * CONFIG.max_concurrency, IS_HUGEPAGE);
+	if (!mtcp->cv_pool) {
+		CTRACE_ERROR("Failed to allocate ccp variable pool.\n");
+	}
+#endif
 
 	mtcp->rbm_snd = SBManagerCreate(CONFIG.sndbuf_size, CONFIG.max_num_buffers);
 	if (!mtcp->rbm_snd) {
@@ -1053,30 +1068,70 @@ InitializeMTCPManager(struct mtcp_thread_context* ctx)
 	return mtcp;
 }
 /*----------------------------------------------------------------------------*/
+#if USE_CCP
 static void *
 CCPRecvLoopThread(void * arg)
 {
 	mtcp_manager_t mtcp = (mtcp_manager_t)arg;
 	mtcp_thread_context_t ctx = mtcp->ctx;
-	int cpu = ctx->cpu;
-	tcp_stream lookup_stream;
-	tcp_stream *stream;
 
+	int cpu = ctx->cpu;
 	mtcp_core_affinitize(cpu);
 
 	TRACE_CCP("ccp recvloop thread started on cpu %d\n", cpu);
-	
-	// TODO:CCP
-	// listen on unix domain socket /tmp/ccp-out/CPU
-	// while(1) {
-	// msg = recv_from_socket
-	// lookup_stream.id = msg->sid;
-	// stream = StreamHTSearch(mtcp->tcp_sid_table, &lookup_stream);
-	// stream->sndvar->cwnd = msg->cwnd;
-	// }
 
+	char recvBuf[CCP_MAX_MSG_SIZE];
+	int bytes_recvd;
+	uint8_t *pu8;
+	uint32_t *pu32;
+	uint8_t msg_type;
+	while(1) {
+		do {
+			tcp_stream lookup_stream;
+			tcp_stream *stream;
+
+			bytes_recvd = recvfrom(mtcp->from_ccp, recvBuf, CCP_MAX_MSG_SIZE, 0, NULL, NULL);
+			if (bytes_recvd <= 0) {
+				if (bytes_recvd < 0) {
+					TRACE_ERROR("recv returned %d\n", bytes_recvd);
+				}
+				break;
+			}
+
+			pu8 = (uint8_t *) recvBuf;
+			msg_type = *pu8;						pu8++;
+			//msg_len = *pu8;							
+																	pu8++;
+
+			pu32 = (uint32_t *) pu8;
+			lookup_stream.id = *pu32;		pu32++;
+			stream = StreamHTSearch(mtcp->tcp_sid_table, &lookup_stream);
+			if (stream == NULL) {
+				TRACE_ERROR("failed to find stream with sid %d in sid_table\n", lookup_stream.id);
+				continue;
+			}
+
+			switch(msg_type) {
+				case CREATE_MSG_TYPE:
+				case MEASURE_MSG_TYPE:
+				case DROP_MSG_TYPE:
+					TRACE_ERROR("datapath should not be receiving msg type %d\n", msg_type);
+					break;
+				case PATTERN_MSG_TYPE:
+					// stream->sndvar->cwnd = msg->cwnd;
+					ccp_install_state_machine((char *)pu32, stream);
+					break;
+				default:
+					TRACE_ERROR("message type %d is not supported\n", msg_type);
+					break;
+			}
+
+		} while(1);
+	}
+	
 	return 0;
 }
+#endif
 /*----------------------------------------------------------------------------*/
 static void *
 MTCPRunThread(void *arg)
@@ -1137,8 +1192,11 @@ MTCPRunThread(void *arg)
 	/* remember this context pointer for signal processing */
 	g_pctx[cpu] = ctx;
 	mlockall(MCL_CURRENT);
+	
 
 #if USE_CCP
+	setup_ccp_connection(mtcp);
+
 	if (pthread_create(&ccp_thread[cpu],
 				NULL, CCPRecvLoopThread, (void *)mtcp) != 0) {
 		TRACE_ERROR("pthread_create of ccp receive thread failed!\n");
@@ -1182,6 +1240,7 @@ mtcp_create_context(int cpu)
 	mctx_t mctx;
 	int ret;
 
+TRACE_CONFIG("CREATE_CONTEXT\n");
 	if (cpu >=  CONFIG.num_cores) {
 		TRACE_ERROR("Failed initialize new mtcp context. "
 					"Requested cpu id %d exceed the number of cores %d configured to use.\n",
@@ -1323,10 +1382,12 @@ mtcp_free_context(mctx_t mctx)
 	fclose(mtcp->log_fp);
 	TRACE_LOG("Log thread %d joined.\n", mctx->cpu);
 	
+#if USE_CCP
 	pthread_join(ccp_thread[ctx->cpu], NULL);
-	close(mtcp->from_ccp_fd);
-	close(mtcp->to_ccp_fd);
+	close(mtcp->from_ccp);
+	close(mtcp->to_ccp);
 	TRACE_CCP("CCP thread %d joined.\n", mctx->cpu);
+#endif
 
 	if (mtcp->connectq) {
 		DestroyStreamQueue(mtcp->connectq);
@@ -1368,6 +1429,9 @@ mtcp_free_context(mctx_t mctx)
 
 	MPDestroy(mtcp->rv_pool);
 	MPDestroy(mtcp->sv_pool);
+#if USE_CCP
+	MPDestroy(mtcp->cv_pool);
+#endif
 	MPDestroy(mtcp->flow_pool);
 	
 	if (mtcp->ap) {
@@ -1528,6 +1592,8 @@ mtcp_init(const char *config_file)
 
 	/* load system-wide io module specs */
 	current_iomodule_func->load_module();
+
+TRACE_CONFIG("DONE INIT\n");
 
 	return 0;
 }

@@ -3,6 +3,9 @@
 #include "tcp_out.h"
 #include "stat.h"
 #include "debug.h"
+#if USE_CCP
+#include "ccp.h"
+#endif
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
@@ -177,10 +180,13 @@ HandleRTO(mtcp_manager_t mtcp, uint32_t cur_ts, tcp_stream *cur_stream)
 {
 	uint8_t backoff;
 
-	TRACE_RTO("Stream %d Timeout! rto: %u (%ums), snd_una: %u, snd_nxt: %u\n", 
-			cur_stream->id, cur_stream->sndvar->rto, TS_TO_MSEC(cur_stream->sndvar->rto), 
+	TRACE_RTO("Stream %d Timeout! now: %u (%ums) rto: %u (%ums), snd_una: %u, snd_nxt: %u\n", 
+			cur_stream->id, cur_ts, TS_TO_MSEC(cur_ts), cur_stream->sndvar->rto, TS_TO_MSEC(cur_stream->sndvar->rto), 
 			cur_stream->sndvar->snd_una, cur_stream->snd_nxt);
 	assert(cur_stream->sndvar->rto > 0);
+#if USE_CCP
+	ccp_notify_drop(mtcp, cur_stream, DROP_TIMEOUT);
+#endif
 
 	/* count number of retransmissions */
 	if (cur_stream->sndvar->nrtx < TCP_MAX_RTX) {
@@ -235,9 +241,12 @@ HandleRTO(mtcp_manager_t mtcp, uint32_t cur_ts, tcp_stream *cur_stream)
 	if (cur_stream->sndvar->ssthresh < (2 * cur_stream->sndvar->mss)) {
 		cur_stream->sndvar->ssthresh = cur_stream->sndvar->mss * 2;
 	}
+#if USE_CCP
+#else
 	cur_stream->sndvar->cwnd = cur_stream->sndvar->mss;
 	TRACE_CONG("Stream %d Timeout. cwnd: %u, ssthresh: %u\n", 
 			cur_stream->id, cur_stream->sndvar->cwnd, cur_stream->sndvar->ssthresh);
+#endif
 
 #if RTM_STAT
 	/* update retransmission stats */

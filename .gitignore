@@ -1,0 +1,7 @@
+*.o
+apps/apache_benchmark/
+tags
+*/**/tags
+log_*
+**/Makefile
+dpdk-16.11/

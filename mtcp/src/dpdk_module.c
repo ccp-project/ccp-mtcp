@@ -1,6 +1,5 @@
 /* for io_module_func def'ns */
 #include "io_module.h"
-#ifndef DISABLE_DPDK
 /* for mtcp related def'ns */
 #include "mtcp.h"
 /* for errno */
@@ -9,6 +8,7 @@
 #include "debug.h"
 /* for num_devices_* */
 #include "config.h"
+#ifndef DISABLE_DPDK
 /* for rte_max_eth_ports */
 #include <rte_common.h>
 /* for rte_eth_rxconf */
@@ -843,8 +843,11 @@ io_module_func dpdk_module_func = {
 };
 /*----------------------------------------------------------------------------*/
 #else
+void no_dpdk_load_module(void) {
+	TRACE_CONFIG("DPDK NOT LOADED!!!\n");
+}
 io_module_func dpdk_module_func = {
-	.load_module		   = NULL,
+	.load_module		   = no_dpdk_load_module,
 	.init_handle		   = NULL,
 	.link_devices		   = NULL,
 	.release_pkt		   = NULL,
