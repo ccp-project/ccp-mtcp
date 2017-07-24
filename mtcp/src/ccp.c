@@ -1,4 +1,3 @@
-#if USE_CCP
 #include <unistd.h>
 #include <sys/un.h>
 
@@ -7,6 +6,8 @@
 #include "tcp_stream.h"
 #include "debug.h"
 #include "ccp.h"
+
+#if USE_CCP
 
 void print_machine(StateMachine *m) {
 	printf("StateMachine {\n");

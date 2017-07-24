@@ -9,9 +9,7 @@
 #include <signal.h>
 #include <assert.h>
 #include <sched.h>
-#if USE_CCP
 #include <sys/un.h>
-#endif
 
 #include "cpu.h"
 #include "ps.h"
@@ -31,9 +29,7 @@
 #include "ip_out.h"
 #include "timer.h"
 #include "debug.h"
-#if USE_CCP
 #include "ccp.h"
-#endif
 
 #ifndef DISABLE_DPDK
 /* for launching rte thread */
