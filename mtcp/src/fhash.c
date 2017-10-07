@@ -123,10 +123,11 @@ StreamHTSearch(struct hashtable *ht, const void *it)
 void *
 StreamHTFind(struct hashtable *ht)
 {
+	int i;
 	tcp_stream *walk;
 	hash_bucket_head *head;
 
-	for (int i = 0; i < NUM_BINS_FLOWS; i++) {
+	for (i = 0; i < NUM_BINS_FLOWS; i++) {
 		head = &ht->ht_table[i];
 		TAILQ_FOREACH(walk, head, rcvvar->he_link) {
 			return walk;

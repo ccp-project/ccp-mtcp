@@ -10,8 +10,9 @@
 #if USE_CCP
 
 void print_machine(StateMachine *m) {
+	int i;
 	printf("StateMachine {\n");
-	for (int i=0; i<m->num_states; i++) {
+	for (i=0; i<m->num_states; i++) {
 		State s = m->seq[i];
 		if (i == m->cur_state) {
 			printf("\t[_]");
@@ -44,7 +45,8 @@ void print_machine(StateMachine *m) {
 }
 
 void print_buf(char *buf, int len) {
-	for (int i=0; i<len; i++) {
+	int i;
+	for (i=0; i<len; i++) {
 		printf("%d ",buf[i]);
 	}
 	printf("\n");
@@ -301,6 +303,7 @@ uint8_t _write_measure_msg(uint32_t sid, uint32_t ack, uint32_t rtt, uint64_t ri
 }
 
 void ccp_install_state_machine(char *in, tcp_stream *stream) {
+	int i;
 	//printf("installing new state machine for stream %d\n", stream->id);
 	StateMachine *m = &(stream->ccp->sm);
 
@@ -310,7 +313,7 @@ void ccp_install_state_machine(char *in, tcp_stream *stream) {
 	// TODO:CCP should probably use the memory pool api for hugepages, but this will do
 	// for now, hopefully..
 	State *seq = malloc(m->num_states * sizeof(State));
-	for (int i=0; i<m->num_states; i++) {
+	for (i=0; i<m->num_states; i++) {
 		memcpy(&(seq[i]), in, sizeof(State));
 		if (seq[i].type == PATTERN_REPORT && seq[i].size == 2) {
 			seq[i].val = 0;
