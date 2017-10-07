@@ -187,6 +187,10 @@ mTCP can be prepared in two ways.
    - check header files in mtcp/include
    - check example binary files in apps/example
 
+   - if you still have a lot of compile errors, you may need to add the following CFLAGS:
+    ```./configure ... CFLAGS="-msse3 -msse4 -msse4.1 -msse4.2 -mavx2"```
+
+
 5. Check the configurations in apps/example
    - epserver.conf for server-side configuration
    - epwget.conf for client-side configuration
