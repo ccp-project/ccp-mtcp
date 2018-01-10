@@ -5,3 +5,4 @@ tags
 log_*
 **/Makefile
 dpdk-16.11/
+*/**/*.d

@@ -124,6 +124,8 @@ void ccp_notify_drop(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t drop_type)
 			return;
 		case DROP_TIMEOUT:
 			TRACE_CCP("timeout!\n");
+			TRACE_CCP("(currently not reporting timeouts to CCP)\n");
+			return;
 			msg_len = _write_drop_msg(stream->id, "timeout", 7, buf);
 			break;
 		case DROP_DUPACK:
@@ -166,14 +168,14 @@ void ccp_sm_send_report(mtcp_manager_t mtcp, tcp_stream *stream) {
 	char buf[CCP_MAX_MSG_SIZE];
 	uint8_t msg_len = 0;
 
-	msg_len = _write_measure_msg(stream->id, stat->ack, MSEC_TO_NSEC(stat->rtt), stat->rin, stat->rout, buf);
+	msg_len = _write_measure_msg(stream->id, stat->ack, USEC_TO_NSEC(stat->rtt), stat->rin, stat->rout, buf);
 	_ccp_send(mtcp, buf, msg_len);
 
 	ccp_reset_stats(stream->ccp);
 }
 
 void ccp_sm_wait_abs(tcp_stream *stream, uint32_t wait_ms) {
-	stream->ccp->next_state_time = current_ts() + wait_ms;//USEC_TO_MSEC(wait_us);
+	stream->ccp->next_state_time = current_ts() + wait_ms;
 }
 
 void ccp_sm_wait_rel(tcp_stream *stream, uint32_t rtt_factor) {
@@ -237,7 +239,7 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream, uint32_t ack, uin
 	*/
 	
 	uint64_t rin = bytes_delivered * S_TO_US, // TODO:CCP divide by snd_int_us
-					 rout = bytes_delivered * S_TO_US; // TODO:CCP divide by rcv_int_us
+		 rout = bytes_delivered * S_TO_US; // TODO:CCP divide by rcv_int_us
 
 
 	FlowStat *stat = &(stream->ccp->stat);
@@ -245,7 +247,7 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream, uint32_t ack, uin
 	stat->rtt = ewma(stat->rtt, rtt);
 	stat->rin = ewma(stat->rin, rin);
 	stat->rout = ewma(stat->rout, rout);
-	//TRACE_CCP("cong_control(%d) ack=%u mrtt=%d rtt=%d\n", stream->id, ack, rtt, stream->ccp->stat.rtt);
+	TRACE_CCP("cong_control(%d) ack=%u mrtt=%d rtt=%d\n", stream->id, ack, rtt, stream->ccp->stat.rtt);
 
 	next_state(mtcp, stream);
 }

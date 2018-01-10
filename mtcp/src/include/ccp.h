@@ -30,7 +30,7 @@
 
 #define MTU 						1500
 #define S_TO_US 				1000000
-#define USEC_TO_MSEC(us)		(us*1000)
+#define USEC_TO_NSEC(us)		(us*1000)
 #define MSEC_TO_NSEC(ms)		(ms*1000000)
 
 typedef uint8_t drop_t;

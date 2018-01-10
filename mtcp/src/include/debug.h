@@ -8,15 +8,15 @@
 #include "tcp_in.h"
 
 /*
-#define DBGFUNC FALSE
 #define LOSS FALSE
-#define RTT FALSE
 #define STATE FALSE
 #define SACK FALSE
 #define CONG FALSE
 #define PKT FALSE
-#define CCP FALSE
 #define RTO FALSE
+#define DBGFUNC TRUE
+#define RTT TRUE
+#define CCP TRUE
 */
 
 #ifdef DBGTEMP
