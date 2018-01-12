@@ -5,8 +5,8 @@ PS=0
 NETMAP=0
 
 # DPDK LIBRARY and HEADER
-DPDK_INC=/home/akshayn/mtcp/dpdk/include
-DPDK_LIB=/home/akshayn/mtcp/dpdk/lib/
+DPDK_INC=/home/frank/mtcp/dpdk/include
+DPDK_LIB=/home/frank/mtcp/dpdk/lib/
 
 # mtcp library and header 
 MTCP_FLD    =../../mtcp/
@@ -35,7 +35,7 @@ endif
 # CFLAGS for DPDK-related compilation
 INC += ${MTCP_INC}
 ifeq ($(DPDK),1)
-DPDK_MACHINE_FLAGS = $(shell cat /home/akshayn/mtcp/dpdk/include/cflags.txt)
+DPDK_MACHINE_FLAGS = $(shell cat /home/frank/mtcp/dpdk/include/cflags.txt)
 INC += ${DPDK_MACHINE_FLAGS} -I${DPDK_INC} -include $(DPDK_INC)/rte_config.h
 endif
 
@@ -48,13 +48,19 @@ else
 endif
 
 ifeq ($(DPDK),1)
-DPDK_LIB_FLAGS = $(shell cat /home/akshayn/mtcp/dpdk/lib/ldflags.txt)
+DPDK_LIB_FLAGS = $(shell cat /home/frank/mtcp/dpdk/lib/ldflags.txt)
 #LIBS += -m64 -g -O3 -pthread -lrt -march=native -Wl,-export-dynamic ${MTCP_FLD}/lib/libmtcp.a -L../../dpdk/lib -Wl,-lnuma -Wl,-lmtcp -Wl,-lpthread -Wl,-lrt -Wl,-ldl -Wl,${DPDK_LIB_FLAGS}
 LIBS += -m64 -g -O3 -pthread -lrt -march=native -export-dynamic ${MTCP_FLD}/lib/libmtcp.a -L../../dpdk/lib -lnuma -lmtcp -lpthread -lrt -ldl ${DPDK_LIB_FLAGS}
 else
 #LIBS += -m64 -g -O3 -pthread -lrt -march=native -Wl,-export-dynamic ${MTCP_FLD}/lib/libmtcp.a -L../../dpdk/lib -Wl,-lnuma -Wl,-lmtcp -Wl,-lpthread -Wl,-lrt -Wl,-ldl -Wl,${DPDK_LIB_FLAGS}
 LIBS += -m64 -g -O3 -pthread -lrt -march=native -export-dynamic ${MTCP_FLD}/lib/libmtcp.a -L../../dpdk/lib -lnuma -lmtcp -lpthread -lrt -ldl ${DPDK_LIB_FLAGS}
 endif
+
+# LIBCCP
+LIBCCP=/home/frank/mtcp/mtcp/src/libccp
+LIBS += -L$(LIBCCP) -lccp
+INC += -I$(LIBCCP)
+# CCP_OBJ = $(LIBCCP)/ccp.o
 
 all: client
 
@@ -64,7 +70,7 @@ client.o: client.c
 
 client: client.o
 	$(MSG) "   LD $<"
-	$(HIDE) ${CC} $< ${LIBS} ${UTIL_OBJ} -o $@
+	$(HIDE) ${CC} $< ${INC} ${LIBS} ${UTIL_OBJ} -o $@
 
 clean:
 	rm -f *~ *.o ${TARGETS} log_*

@@ -109,6 +109,7 @@ struct tcp_send_vars
 	/* congestion control variables */
 	uint32_t cwnd;				/* congestion window */
 	uint32_t ssthresh;			/* slow start threshold */
+	uint32_t pacing_rate;
 
 	/* timestamp */
 	uint32_t ts_lastack_sent;	/* last ack sent time */
@@ -188,13 +189,10 @@ typedef struct tcp_stream
 
 	struct tcp_recv_vars *rcvvar;
 	struct tcp_send_vars *sndvar;
+	struct ccp_connection *ccp_conn;
 	
 	uint32_t last_active_ts;		/* ts_last_ack_sent or ts_last_ts_upd */
 
-#if USE_CCP
-	struct ccp_vars *ccp;
-#endif
-	
 } tcp_stream;
 
 extern inline char *

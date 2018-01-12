@@ -30,6 +30,7 @@
 #include "timer.h"
 #include "debug.h"
 #include "ccp.h"
+#include "libccp/ccp.h"
 
 #ifndef DISABLE_DPDK
 /* for launching rte thread */
@@ -946,11 +947,13 @@ InitializeMTCPManager(struct mtcp_thread_context* ctx)
 		return NULL;
 	}
 #if USE_CCP
+	/*
 	mtcp->cv_pool = MPCreate(sizeof(struct ccp_vars),
 			sizeof(struct ccp_vars) * CONFIG.max_concurrency, IS_HUGEPAGE);
 	if (!mtcp->cv_pool) {
 		CTRACE_ERROR("Failed to allocate ccp variable pool.\n");
 	}
+	*/
 #endif
 
 	mtcp->rbm_snd = SBManagerCreate(CONFIG.sndbuf_size, CONFIG.max_num_buffers);
@@ -1078,13 +1081,13 @@ CCPRecvLoopThread(void * arg)
 
 	char recvBuf[CCP_MAX_MSG_SIZE];
 	int bytes_recvd;
-	uint8_t *pu8;
-	uint32_t *pu32;
-	uint8_t msg_type;
+	//uint8_t *pu8;
+	//uint32_t *pu32;
+	//uint8_t msg_type;
 	while(1) {
 		do {
-			tcp_stream lookup_stream;
-			tcp_stream *stream;
+			//tcp_stream lookup_stream;
+			//tcp_stream *stream;
 
 			bytes_recvd = recvfrom(mtcp->from_ccp, recvBuf, CCP_MAX_MSG_SIZE, 0, NULL, NULL);
 			if (bytes_recvd <= 0) {
@@ -1093,6 +1096,9 @@ CCPRecvLoopThread(void * arg)
 				}
 				break;
 			}
+
+			ccp_read_msg(recvBuf, bytes_recvd);
+			/*
 
 			pu8 = (uint8_t *) recvBuf;
 			msg_type = *pu8;						pu8++;
@@ -1121,6 +1127,7 @@ CCPRecvLoopThread(void * arg)
 					TRACE_ERROR("message type %d is not supported\n", msg_type);
 					break;
 			}
+			*/
 
 		} while(1);
 	}
@@ -1380,8 +1387,7 @@ mtcp_free_context(mctx_t mctx)
 	
 #if USE_CCP
 	pthread_join(ccp_thread[ctx->cpu], NULL);
-	close(mtcp->from_ccp);
-	close(mtcp->to_ccp);
+	destroy_ccp_connection(mtcp);
 	TRACE_CCP("CCP thread %d joined.\n", mctx->cpu);
 #endif
 
@@ -1426,7 +1432,9 @@ mtcp_free_context(mctx_t mctx)
 	MPDestroy(mtcp->rv_pool);
 	MPDestroy(mtcp->sv_pool);
 #if USE_CCP
+	/*
 	MPDestroy(mtcp->cv_pool);
+	*/
 #endif
 	MPDestroy(mtcp->flow_pool);
 	

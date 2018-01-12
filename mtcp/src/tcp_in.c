@@ -551,7 +551,10 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 #if USE_CCP
 		// TODO:CCP rmlen does not account for rtx!
 		// uint32_t mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd;
-		ccp_cong_control(mtcp, cur_stream, ack_seq, cur_stream->rcvvar->srtt >> 3, rmlen);
+		ccp_cong_control(mtcp, cur_stream, 
+				ack_seq,
+				cur_stream->rcvvar->srtt >> 3,
+				rmlen, packets);
 #endif
 	}
 

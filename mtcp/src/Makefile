@@ -1,5 +1,6 @@
+# TODO: Make this Makefile.in pretty
 
-.PHONY: clean
+.PHONY: clean libccp
 
 ### TARGET ###
 PS=0
@@ -14,7 +15,7 @@ MTCP_HDR = mtcp_api.h mtcp_epoll.h
 
 
 ### GCC ###
-GCC=gcc
+GCC=gcc-4.8
 
 ### FLAGS ###
 ifeq ($(shell uname -m),x86_64)
@@ -28,9 +29,11 @@ GCC_OPT += -Wall -fPIC -fgnu89-inline -Werror
 #DBG_OPT += -DPKTDUMP
 #DBG_OPT += -DDUMP_STREAM
 #GCC_OPT += -g -DNETSTAT -DINFO -DDBGERR -DDBGCERR
-GCC_OPT += -DNDEBUG -O3 -DNETSTAT -DINFO -DDBGERR -DDBGCERR
+GCC_OPT += -DNDEBUG -g -O3 -DNETSTAT -DINFO -DDBGERR -DDBGCERR -D__USRLIB__
 #GCC_OPT += -DNDEBUG -g -DNETSTAT -DINFO -DDBGERR -DDBGCERR
 GCC_OPT += $(DBG_OPT)
+
+CFLAGS=-g -O2 -msse3 -msse4 -msse4.1 -msse4.2 -mavx2
 
 ifeq ($(LRO),1)
 GCC_OPT += -DENABLELRO
@@ -67,6 +70,9 @@ DPDK_LIB=/home/frank/mtcp/dpdk/lib/
 ifeq ($(DPDK), 1)
 DPDK_MACHINE_FLAGS = $(shell cat /home/frank/mtcp/dpdk/include/cflags.txt)
 INC += ${DPDK_MACHINE_FLAGS} -I${DPDK_INC} -include $(DPDK_INC)/rte_config.h
+LIBCCP_PATH=/home/frank/mtcp/mtcp/src/libccp
+LIBS = -L$(LIBCCP_PATH) -lccp
+INC += -I$(LIBCCP_PATH)
 else
 INC += -DDISABLE_DPDK
 endif
@@ -96,17 +102,20 @@ else
 endif
 
 ### GOALS ###
-all: default
+all: default libccp
 
 default: $(OBJS) $(MTCP_HDR)
 	mkdir -p $(MTCP_LIB_DIR)
 	ar rvs $(MTCP_LIB_DIR)/$(MTCP_LIB) $(OBJS)
 
+libccp: 
+	$(MAKE) -C ./libccp
+
 $(OBJS): %.o: %.c Makefile
 	$(MSG) "   CC $<"
-	$(HIDE) $(GCC) $(GCC_OPT) $(INC) -c $< -o $@
+	$(HIDE) $(GCC) $(CFLAGS) $(GCC_OPT) $(INC) $(LIBS) -c $< -o $@
 $(DEPS): .%.d: %.c Makefile
-	$(HIDE) $(GCC) $(GCC_OPT) $(INC) -MM $(CFLAGS) $< > $@
+	$(HIDE) $(GCC) $(GCC_OPT) $(INC) $(LIBS) -MM $(CFLAGS) $< > $@
 
 -include $(DEPS)
 
