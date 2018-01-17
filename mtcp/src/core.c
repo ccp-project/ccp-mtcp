@@ -1084,7 +1084,7 @@ CCPRecvLoopThread(void * arg)
 	//uint8_t *pu8;
 	//uint32_t *pu32;
 	//uint8_t msg_type;
-	while(1) {
+	while (!ctx->done && !ctx->exit) {
 		do {
 			//tcp_stream lookup_stream;
 			//tcp_stream *stream;
@@ -1383,12 +1383,12 @@ mtcp_free_context(mctx_t mctx)
 	UNUSED(ret);
 	pthread_join(log_thread[ctx->cpu], NULL);
 	fclose(mtcp->log_fp);
-	TRACE_LOG("Log thread %d joined.\n", mctx->cpu);
+	TRACE_INFO("Log thread %d joined.\n", mctx->cpu);
 	
 #if USE_CCP
-	pthread_join(ccp_thread[ctx->cpu], NULL);
 	destroy_ccp_connection(mtcp);
-	TRACE_CCP("CCP thread %d joined.\n", mctx->cpu);
+	//pthread_join(ccp_thread[ctx->cpu], NULL);
+	TRACE_INFO("CCP thread %d joined.\n", mctx->cpu);
 #endif
 
 	if (mtcp->connectq) {
