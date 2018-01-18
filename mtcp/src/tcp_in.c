@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <inttypes.h>
 
 #include "tcp_util.h"
 #include "tcp_in.h"
@@ -8,9 +9,7 @@
 #include "debug.h"
 #include "timer.h"
 #include "ip_in.h"
-#if USE_CCP
 #include "ccp.h"
-#endif
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
@@ -385,6 +384,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 					cur_stream->rcvvar->dup_acks++;
 				}
 				dup = TRUE;
+#if USE_CCP
+                ccp_record(mtcp, cur_stream, RECORD_DUPACK, 0);
+#endif
 			}
 		}
 	}
@@ -396,7 +398,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	/* Fast retransmission */
 	if (dup && cur_stream->rcvvar->dup_acks == 3) {
 #if USE_CCP
-		ccp_notify_drop(mtcp, cur_stream, DROP_DUPACK);
+		ccp_record(mtcp, cur_stream, RECORD_TRI_DUPACK, 0);// (cur_stream->snd_nxt - ack_seq));
 #endif
 		TRACE_LOSS("Triple duplicated ACKs!! ack_seq: %u\n", ack_seq);
 		if (TCP_SEQ_LT(ack_seq, cur_stream->snd_nxt)) {
@@ -547,13 +549,14 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		SBUF_UNLOCK(&sndvar->write_lock);
 		UpdateRetransmissionTimer(mtcp, cur_stream, cur_ts);
 
-		
+        log_cwnd_rtt(cur_stream);
+
 #if USE_CCP
 		// TODO:CCP rmlen does not account for rtx!
 		// uint32_t mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd;
 		ccp_cong_control(mtcp, cur_stream, 
 				ack_seq,
-				cur_stream->rcvvar->srtt >> 3,
+				cur_stream->rcvvar->srtt,
 				rmlen, packets);
 #endif
 	}

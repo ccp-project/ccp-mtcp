@@ -185,7 +185,7 @@ HandleRTO(mtcp_manager_t mtcp, uint32_t cur_ts, tcp_stream *cur_stream)
 			cur_stream->sndvar->snd_una, cur_stream->snd_nxt);
 	assert(cur_stream->sndvar->rto > 0);
 #if USE_CCP
-	ccp_notify_drop(mtcp, cur_stream, DROP_TIMEOUT);
+	ccp_record(mtcp, cur_stream, RECORD_TIMEOUT, 0);
 #endif
 
 	/* count number of retransmissions */

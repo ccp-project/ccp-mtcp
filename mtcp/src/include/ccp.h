@@ -13,35 +13,19 @@
 
 #define INIT_CWND 2
 
-#define CREATE_MSG_TYPE		0
-#define MEASURE_MSG_TYPE	1
-#define DROP_MSG_TYPE			2
-#define PATTERN_MSG_TYPE	3
-
-#define CREATE_MIN_LEN		10
-#define MEASURE_MIN_LEN		30
-#define DROP_MIN_LEN			6
-#define PATTERN_MIN_LEN		6
-
-#define PATTERN_SETRATEABS	0
-#define PATTERN_SETCWNDABS	1
-#define PATTERN_SETRATEREL	2
-#define PATTERN_WAITABS			3
-#define PATTERN_WAITREL			4
-#define PATTERN_REPORT			5
-
 #define MTU 						1500
 #define S_TO_US 				1000000
 #define USEC_TO_NSEC(us)		(us*1000)
 #define NSEC_TO_USEC(ns)    (ns/1000)
 #define MSEC_TO_NSEC(ms)		(ms*1000000)
 #define BILLION 1000000000L
+#define MAX(a, b) ((a)>(b)?(a):(b))
 
-typedef uint8_t drop_t;
-#define NO_DROP				0
-#define DROP_TIMEOUT	1
-#define DROP_DUPACK		2
-#define DROP_ECN			3
+#define RECORD_NONE       0
+#define RECORD_DUPACK     1
+#define RECORD_TRI_DUPACK 2
+#define RECORD_TIMEOUT    3
+#define RECORD_ECN        4
 
 static inline uint32_t current_ts() {
 	struct timeval cur_ts = {0};
@@ -52,75 +36,9 @@ static inline uint32_t current_ts() {
 void setup_ccp_connection(mtcp_manager_t mtcp);
 void destroy_ccp_connection(mtcp_manager_t mtcp);
 void ccp_create(mtcp_manager_t mtcp, tcp_stream *stream);
-void ccp_notify_drop(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t drop_type);
 void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream, uint32_t ack, uint32_t rtt, uint64_t bytes_delivered, uint64_t packets_delivered);
-void ccp_install_state_machine(char *in, tcp_stream *stream);
+void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uint32_t val);
 
-/*
-typedef struct CreateMsg {
-	uint32_t	sid;
-	uint32_t	start_seq;
-	char*			cong_alg;
-} CreateMsg;
-*/
-
-uint8_t _write_create_msg(
-		uint32_t sid,
-		uint32_t iss,
-		char *cong_alg,
-		uint8_t cong_alg_len,
-		char *out
-);
-uint8_t _write_drop_msg(
-		uint32_t sid,
-		char *event,
-		uint8_t event_len,
-		char *out
-);
-uint8_t _write_measure_msg(
-		uint32_t sid,
-		uint32_t ack,
-		uint32_t rtt,
-		uint64_t rin,
-		uint64_t rout,
-		char *out
-);
-
-typedef struct __attribute__((packed, aligned(2))) State {
-	uint8_t type;
-	uint8_t size;
-	uint32_t val;
-} State;
-
-typedef struct StateMachine {
-	uint8_t num_states;
-	uint8_t cur_state;
-	State *seq;
-} StateMachine;
-
-typedef struct FlowStat {
-	uint32_t ack;
-	uint32_t rtt;
-	uint64_t rin;
-	uint64_t rout;
-} FlowStat;
-
-struct ccp_vars {
-	uint32_t			cur_rate;
-	uint32_t			next_state_time;
-	drop_t				last_drop_t;
-	FlowStat			stat;
-	StateMachine	sm;
-};
-
-#define CCP_FRAC_DENOM		10
-#define CCP_EWMA_RECENCY	6
-static inline uint64_t ewma(uint64_t curr, uint64_t sample) {
-	if (curr == 0) {
-		return sample;
-	}
-	return ((sample * CCP_EWMA_RECENCY) + 
-			(curr * (CCP_FRAC_DENOM-CCP_EWMA_RECENCY))) / CCP_FRAC_DENOM;
-}
+void log_cwnd_rtt(tcp_stream *stream);
 
 #endif /* __CCP_H_ */
