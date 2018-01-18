@@ -15,6 +15,7 @@
 #include <arpa/inet.h>
 #include <sys/queue.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include <mtcp_api.h>
 #include <mtcp_epoll.h>
@@ -48,12 +49,17 @@
 #define FALSE (0)
 #endif
 
-#ifndef ERROR
-#define ERROR (-1)
-#endif
-
 #define CONCURRENCY 1
 #define BUF_LEN 8192
+#define MAX_FLOW_NUM (10000)
+#define MAX_EVENTS (30000)
+
+#define DEBUG(fmt, args...) fprintf(stderr, "[DEBUG] " fmt "\n", ## args)
+#define ERROR(fmt, args...) fprintf(stderr, fmt "\n", ## args)
+#define SAMPLE(fmt, args...) fprintf(stdout, fmt "\n", ## args)
+
+#define SEND_MODE 1
+#define WAIT_MODE 2
 
 struct thread_context
 {
@@ -63,13 +69,22 @@ struct thread_context
 
 void SignalHandler(int signum) 
 {
-	printf("Received SIGINT.\n");
+	ERROR("Received SIGINT");
 	exit(-1);
+}
+
+void print_usage(int mode) {
+    if (mode == SEND_MODE || mode == 0) {
+		ERROR("(client initiates)   usage: ./client send [ip] [port] [bytes]");
+    }
+    if (mode == WAIT_MODE || mode == 0) {
+        ERROR("(server initiates)   usage: ./client wait [bytes]");
+    }
 }
 
 int main(int argc, char **argv) 
 {
-	int ret;
+	int ret, i, c;
 	// mtcp 
 	mctx_t mctx;
 	struct mtcp_conf mcfg;
@@ -79,30 +94,67 @@ int main(int argc, char **argv)
 	int core = 0,
 			ep_id;
 	// sockets
-	struct sockaddr_in daddr;
+	struct sockaddr_in saddr, daddr;
 	int sockfd;
 	// counters
 	int bytes_to_send;
-	int wrote      = 0,
-			read       = 0,
-			bytes_sent = 0,
-			events_ready = 0;
+	int wrote        = 0,
+        read         = 0,
+        bytes_sent   = 0,
+        events_ready = 0,
+        nevents      = 0;
+
 	double elapsed_time = 0.0;
 	struct timeval t1, t2;
 	// send buffer
 	char buf[BUF_LEN];
 	char rcvbuf[BUF_LEN];
 
-	if (argc < 4) {
-		printf("usage: ./client [ip] [port] [bytes]\n");
+    int backlog = 3;
+    int mode = 0;
+
+	if (argc < 2) {
+        print_usage(0);
 		return -1;
 	}
 
-	// Parse command-line args 
-	daddr.sin_family = AF_INET;
-	daddr.sin_addr.s_addr = inet_addr(argv[1]);;
-	daddr.sin_port = htons(atoi(argv[2]));
-	bytes_to_send = atoi(argv[3]);
+    if (strncmp(argv[1], "send", 4) == 0) {   
+        if (argc < 5) { 
+            print_usage(SEND_MODE);
+            return -1;
+        }
+
+        mode = SEND_MODE;
+        DEBUG("Send mode");
+
+        // Parse command-line args 
+        daddr.sin_family = AF_INET;
+        daddr.sin_addr.s_addr = inet_addr(argv[2]);;
+        daddr.sin_port = htons(atoi(argv[3]));
+        bytes_to_send = atoi(argv[4]);
+
+    } else if (strncmp(argv[1], "wait", 4) == 0) {
+        if (argc < 4) {
+            print_usage(WAIT_MODE);
+            return -1;
+        }
+
+        mode = WAIT_MODE;
+        DEBUG("Wait mode");
+
+        saddr.sin_family = AF_INET;
+        saddr.sin_addr.s_addr = inet_addr("10.1.1.5");//INADDR_ANY;
+        saddr.sin_port = htons(atoi(argv[2]));
+        bytes_to_send = atoi(argv[3]);
+
+    } else {
+        ERROR("Unknown mode \"%s\"", argv[1]);
+        print_usage(0);
+    }
+
+    if (mode == 0) {
+        return -1;
+    }
 
 	// This must be done before mtcp_init
 	mtcp_getconf(&mcfg);
@@ -112,9 +164,9 @@ int main(int argc, char **argv)
 	srand(time(NULL));
 
 	// Init mtcp
-	printf("Initializing mtcp...\n");
+	DEBUG("Initializing mtcp...\n");
 	if (mtcp_init("client.conf")) {
-		printf("Failed to initialize mtcp.\n");
+		ERROR("Failed to initialize mtcp.\n");
 		return -1;
 	}
 
@@ -127,56 +179,47 @@ int main(int argc, char **argv)
 	// Catch ctrl+c to clean up
 	mtcp_register_signal(SIGINT, SignalHandler);
 
-	printf("Creating thread context...\n");
+	DEBUG("Creating thread context...");
 	mtcp_core_affinitize(core);
 	ctx = (struct thread_context *) calloc(1, sizeof(struct thread_context));
 	if (!ctx) {
-		printf("Failed to create context.\n");
+		ERROR("Failed to create context.");
 		perror("calloc");
 		return -1;
 	}
 	ctx->core = core;
 	ctx->mctx = mtcp_create_context(core);
 	if (!ctx->mctx) {
-		printf("Failed to create mtcp context.\n");
+		ERROR("Failed to create mtcp context.");
 		return -1;
 	}
 	mctx = ctx->mctx;
 
-	// Create pool of TCP source ports for outgoing conns
-	printf("Creating pool of TCP source ports...\n");
-	mtcp_init_rss(mctx, INADDR_ANY, IP_RANGE, daddr.sin_addr.s_addr, daddr.sin_port);
+    if (mode == SEND_MODE) {
+        // Create pool of TCP source ports for outgoing conns
+        DEBUG("Creating pool of TCP source ports...");
+        mtcp_init_rss(mctx, INADDR_ANY, IP_RANGE, daddr.sin_addr.s_addr, daddr.sin_port);
+    }
 
-	printf("Creating epoller...\n");
+	DEBUG("Creating epoller...");
 	ep_id = mtcp_epoll_create(ctx->mctx, mcfg.max_num_buffers);
 	events = (struct mtcp_epoll_event *) calloc(mcfg.max_num_buffers, sizeof(struct mtcp_epoll_event));
 	if (!events) {
-		printf("Failed to allocate events.\n");
+		ERROR("Failed to allocate events.");
 		return -1;
 	}
 
 
-  printf("Creating socket...\n");
+    DEBUG("Creating socket...");
 	sockfd = mtcp_socket(mctx, AF_INET, SOCK_STREAM, 0);
 	if (sockfd < 0) {
-		printf("Failed to create socket.\n");
+		ERROR("Failed to create socket.");
 		return -1;
-	}
-
-	printf("Connecting socket...\n");
-	ret = mtcp_connect(mctx, sockfd, (struct sockaddr *)&daddr, sizeof(struct sockaddr_in));
-	if (ret < 0) {
-		printf("mtcp_connect failed.\n");
-		if (errno != EINPROGRESS) {
-			perror("mtcp_connect");
-			mtcp_close(mctx, sockfd);
-			return -1;
-		}
 	}
 
 	ret = mtcp_setsock_nonblock(mctx, sockfd);
 	if (ret < 0) {
-		printf("Failed to set socket in nonblocking mode.\n");
+		ERROR("Failed to set socket in nonblocking mode.");
 		return -1;
 	}
 
@@ -184,14 +227,79 @@ int main(int argc, char **argv)
 	ev.data.sockid = sockfd;
 	mtcp_epoll_ctl(mctx, ep_id, MTCP_EPOLL_CTL_ADD, sockfd, &ev);
 
+    if (mode == WAIT_MODE) {
+        ret = mtcp_bind(mctx, sockfd, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
+        if (ret < 0) {
+            ERROR("Failed to bind to the listening socket.");
+        }
+
+        ret = mtcp_listen(mctx, sockfd, backlog);
+        if (ret < 0) {
+            ERROR("Failed to listen: %s", strerror(errno));
+        }
+
+        while (1) { // loop until connected to a server, break when we can send
+            nevents = mtcp_epoll_wait(mctx, ep_id, events, MAX_EVENTS, -1);
+            if (nevents < 0) {
+                if (errno != EINTR) {
+                    perror("mtcp_epoll_wait");
+                }
+                return -1;
+            }
+
+            for (i = 0; i < nevents; i++) {
+                if (events[i].data.sockid == sockfd) {
+                    c = mtcp_accept(mctx, sockfd, NULL, NULL);
+                    if (c >= 0) {
+                        if (c >= MAX_FLOW_NUM) {
+                            ERROR("Invalid socket id %d.", c);
+                        }
+                        DEBUG("Accepted new connection");
+                    } else {
+                        ERROR("mtcp_accept() %s", strerror(errno));
+                    }
+                    mtcp_epoll_ctl(mctx, ep_id, MTCP_EPOLL_CTL_DEL, sockfd, &ev);
+                    sockfd = c;
+                    ev.events = MTCP_EPOLLIN;
+                    ev.data.sockid = sockfd;
+                    mtcp_epoll_ctl(mctx, ep_id, MTCP_EPOLL_CTL_ADD, sockfd, &ev);
+                    goto end_wait_loop;
+                } else {
+                    ERROR("Received event on unknown socket.");
+                }
+            }
+        }
+    }
+end_wait_loop:
+
+
+    if (mode == SEND_MODE) {
+        DEBUG("Connecting socket...");
+        ret = mtcp_connect(mctx, sockfd, (struct sockaddr *)&daddr, sizeof(struct sockaddr_in));
+        if (ret < 0) {
+            ERROR("mtcp_connect failed.");
+            if (errno != EINPROGRESS) {
+                perror("mtcp_connect");
+                mtcp_close(mctx, sockfd);
+                return -1;
+            }
+        }
+        DEBUG("Connection created.");
+    }
+    DEBUG("Sending %d bytes...", bytes_to_send);
+
 	// Fill buffer with some data
 	memset(buf, 0x90, sizeof(char) * BUF_LEN);
 	buf[BUF_LEN-1] = '\0';
 
-  int connected = 0;
-	printf("Connection created. Sending...\n");
-	while (bytes_to_send > 0) {
-		wrote = mtcp_write(ctx->mctx, sockfd, buf, (bytes_to_send < BUF_LEN ? bytes_to_send : BUF_LEN));
+    int connected = 0;
+	while (bytes_to_send > 1) {
+		wrote = mtcp_write(ctx->mctx, sockfd, buf,
+                (bytes_to_send < BUF_LEN ? bytes_to_send : BUF_LEN));
+        if (wrote < 0) {
+            //ERROR("write returned %d: %s", wrote, strerror(errno));
+            //return -1;
+        }
 		if (wrote > 0 && connected == 0) {
 			gettimeofday(&t1, NULL); 
 			connected = 1;
@@ -203,33 +311,35 @@ int main(int argc, char **argv)
 	// Send done (anything other than 0x90)
 	memset(buf, 0x96, sizeof(char) * BUF_LEN);
 	mtcp_write(ctx->mctx, sockfd, buf, 1);
-	goto stop_timer;
-	// Poll for "OK" from receiver
-	printf("Done writing... polling...\n");
-	events_ready = mtcp_epoll_wait(ctx->mctx, ep_id, events, mcfg.max_num_buffers, -1);
-	printf("epoll returned %d.\n", events_ready);
+
+	DEBUG("Done writing... polling...");
+
 	while (1) {
-	for (int i=0; i<events_ready; i++) {
-		if (events[i].events & MTCP_EPOLLIN) {
-			read = mtcp_read(ctx->mctx, sockfd, rcvbuf, BUF_LEN);
-			if (read <= 0) {
-				goto stop_timer;
-			} else {
-				printf("Read %d bytes: %s\n", read, rcvbuf);
-			}
-		} else {
-			printf("Event was %d\n",events[i].events);
-			goto stop_timer;
-		}
-	}
+        //DEBUG("epoll returned %d : %s.", events_ready, EventToString(events[0].events));
+        events_ready = mtcp_epoll_wait(ctx->mctx, ep_id, events, mcfg.max_num_buffers, -1);
+        for (int i=0; i<events_ready; i++) {
+            if (events[i].events & MTCP_EPOLLIN) {
+                read = mtcp_read(ctx->mctx, sockfd, rcvbuf, BUF_LEN);
+                if (read <= 0) {
+                    //ERROR("read returned %d: %s", read, strerror(errno));
+                } else {
+                    DEBUG("Read %d bytes: %s", read, rcvbuf);
+                    goto stop_timer;
+                }
+            } else {
+                DEBUG("Unexpected event was %d",events[i].events);
+                goto stop_timer;
+            }
+        }
 	}
 stop_timer:
 	gettimeofday(&t2, NULL);
 
-	printf("Done reading. Closing socket...\n");
+	DEBUG("Done reading. Closing socket...");
 	mtcp_close(mctx, sockfd);
-	printf("Socket closed.\n");
+	DEBUG("Socket closed.");
 	
+    printf("\n\n");
 	// Calculate and report stats
 	elapsed_time = (t2.tv_sec - t1.tv_sec) * 1.0;
 	elapsed_time += (t2.tv_usec - t1.tv_usec) / 1000000.0;

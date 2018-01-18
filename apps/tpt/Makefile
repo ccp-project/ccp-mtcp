@@ -66,11 +66,11 @@ all: client
 
 client.o: client.c
 	$(MSG) "   CC $<"
-	$(HIDE) ${CC} -c $< ${CFLAGS} ${INC}
+	$(HIDE) ${CC} -g -c $< ${CFLAGS} ${INC}
 
 client: client.o
 	$(MSG) "   LD $<"
-	$(HIDE) ${CC} $< ${INC} ${LIBS} ${UTIL_OBJ} -o $@
+	$(HIDE) ${CC} $< ${INC} ${LIBS} ${UTIL_OBJ} -g -o $@
 
 clean:
 	rm -f *~ *.o ${TARGETS} log_*
