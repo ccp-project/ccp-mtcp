@@ -11,6 +11,8 @@
 #define TO_CCP_PREFIX "/tmp/ccp/0/in"
 #define CCP_MAX_MSG_SIZE 256
 
+#define INIT_CWND 2
+
 #define CREATE_MSG_TYPE		0
 #define MEASURE_MSG_TYPE	1
 #define DROP_MSG_TYPE			2
