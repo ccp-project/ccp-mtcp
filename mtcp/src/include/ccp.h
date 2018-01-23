@@ -19,6 +19,8 @@
 #define NSEC_TO_USEC(ns)    (ns/1000)
 #define MSEC_TO_NSEC(ms)		(ms*1000000)
 #define BILLION 1000000000L
+
+#define MIN(a, b) ((a)<(b)?(a):(b))
 #define MAX(a, b) ((a)>(b)?(a):(b))
 
 #define RECORD_NONE       0
@@ -41,4 +43,8 @@ void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uin
 
 void log_cwnd_rtt(tcp_stream *stream);
 
+// Time functions, needed for token bucket
+uint32_t _dp_now();
+uint32_t _dp_since_usecs(uint32_t then);
+uint32_t _dp_after_usecs(uint32_t usecs);
 #endif /* __CCP_H_ */

@@ -7,6 +7,7 @@
 #include "eventpoll.h"
 #include "timer.h"
 #include "debug.h"
+#include "token_bucket.h"
 
 #define TCP_CALCULATE_CHECKSUM      TRUE
 #define ACK_PIGGYBACK				TRUE
@@ -442,6 +443,14 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 			packets = -3;
 			goto out;
 		}
+
+#if USE_CCP
+                if (cur_stream->bucket->rate != 0 && 
+                    SufficientTokens(cur_stream->bucket, len * 8) < 0) {
+                    packets = -3;
+                    goto out;
+                }
+#endif
 	
 		sndlen = SendTCPPacket(mtcp, cur_stream, cur_ts, 
 				TCP_FLAG_ACK, data, len);

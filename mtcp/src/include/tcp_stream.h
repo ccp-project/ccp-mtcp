@@ -6,6 +6,7 @@
 #include <sys/queue.h>
 
 #include "mtcp.h"
+#include "token_bucket.h"
 
 struct rtm_stat
 {
@@ -44,6 +45,7 @@ struct tcp_recv_vars
 	/* variables for fast retransmission */
 	uint8_t dup_acks;		/* number of duplicated acks */
 	uint32_t last_ack_seq;	/* highest ackd seq */
+        uint32_t sacked_pkts;
 	
 	/* timestamps */
 	uint32_t ts_recent;			/* recent peer timestamp */
@@ -109,7 +111,6 @@ struct tcp_send_vars
 	/* congestion control variables */
 	uint32_t cwnd;				/* congestion window */
 	uint32_t ssthresh;			/* slow start threshold */
-	uint32_t pacing_rate;
 
 	/* timestamp */
 	uint32_t ts_lastack_sent;	/* last ack sent time */
@@ -190,6 +191,9 @@ typedef struct tcp_stream
 	struct tcp_recv_vars *rcvvar;
 	struct tcp_send_vars *sndvar;
 	struct ccp_connection *ccp_conn;
+#if USE_CCP
+        struct token_bucket *bucket;
+#endif
 	
 	uint32_t last_active_ts;		/* ts_last_ack_sent or ts_last_ts_upd */
 

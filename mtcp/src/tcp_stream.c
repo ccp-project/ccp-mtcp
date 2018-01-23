@@ -11,6 +11,7 @@
 #if USE_CCP
 #include "ccp.h"
 #endif
+#include "token_bucket.h"
 
 #define TCP_MAX_SEQ 4294967295
 
@@ -370,6 +371,7 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 			stream->sndvar->iss);
 
 #if USE_CCP
+        stream->bucket = NewTokenBucket();
 	ccp_create(mtcp, stream);
 #endif
 
