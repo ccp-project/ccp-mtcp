@@ -382,11 +382,11 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 			if (cur_stream->rcvvar->snd_wl2 + sndvar->peer_wnd == right_wnd_edge) {
 				if (cur_stream->rcvvar->dup_acks + 1 > cur_stream->rcvvar->dup_acks) {
 					cur_stream->rcvvar->dup_acks++;
+#if USE_CCP
+                                        ccp_record(mtcp, cur_stream, RECORD_DUPACK, (cur_stream->snd_nxt - ack_seq));
+#endif
 				}
 				dup = TRUE;
-#if USE_CCP
-                ccp_record(mtcp, cur_stream, RECORD_DUPACK, 0);
-#endif
 			}
 		}
 	}
@@ -397,9 +397,6 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 
 	/* Fast retransmission */
 	if (dup && cur_stream->rcvvar->dup_acks == 3) {
-#if USE_CCP
-		ccp_record(mtcp, cur_stream, RECORD_TRI_DUPACK, 0);// (cur_stream->snd_nxt - ack_seq));
-#endif
 		TRACE_LOSS("Triple duplicated ACKs!! ack_seq: %u\n", ack_seq);
 		if (TCP_SEQ_LT(ack_seq, cur_stream->snd_nxt)) {
 			TRACE_LOSS("Reducing snd_nxt from %u to %u\n", 
@@ -407,6 +404,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 #if RTM_STAT
 			sndvar->rstat.tdp_ack_cnt++;
 			sndvar->rstat.tdp_ack_bytes += (cur_stream->snd_nxt - ack_seq);
+#endif
+#if USE_CCP
+                        ccp_record(mtcp, cur_stream, RECORD_TRI_DUPACK, ack_seq);// (cur_stream->snd_nxt - ack_seq));
 #endif
 			if (ack_seq != sndvar->snd_una) {
 				TRACE_DBG("ack_seq and snd_una mismatch on tdp ack. "
