@@ -15,6 +15,7 @@
  ****************************************************************************/
 uint64_t init_time_ns = 0;
 uint32_t last_print = 0;
+#define SAMPLE_FREQ_US 100000
 
 uint32_t _dp_now() {
     struct timespec now;
@@ -41,12 +42,19 @@ uint32_t _dp_after_usecs(uint32_t usecs) {
 }
 
 void log_cwnd_rtt(tcp_stream *stream) {
-    unsigned long now = (unsigned long)(_dp_now() / 1000);
-    if (_dp_since_usecs(last_print) > 100000) {
-        printf("%lu %d %d\n", 
-                now, 
+    unsigned long now = (unsigned long)(_dp_now());
+    if (_dp_since_usecs(last_print) > SAMPLE_FREQ_US) {
+        fprintf(stderr, "%lu %d %d %d ", 
+                now / 1000, 
                 stream->rcvvar->srtt * 125,
-                stream->sndvar->cwnd / stream->sndvar->mss);
+                stream->sndvar->cwnd / stream->sndvar->mss,
+#if TCP_OPT_SACK_ENABLED
+                stream->rcvvar->sacked_pkts
+#else
+                -1
+#endif
+                );
+        PrintBucket(stream->bucket);
         last_print = now;
     }
 }
@@ -75,15 +83,13 @@ static void _dp_set_cwnd(struct ccp_datapath *dp, struct ccp_connection *conn, u
 static void _dp_set_rate_abs(struct ccp_datapath *dp, struct ccp_connection *conn, uint32_t rate) {
 	tcp_stream *stream;
 	get_stream_from_ccp(&stream, conn);
-	// TODO: stream->sndvar->pacing_rate = rate;
-	TRACE_ERROR("set_rate_abs not yet implemented!\n")
+    stream->bucket->rate = rate;
 }
 
 static void _dp_set_rate_rel(struct ccp_datapath *dp, struct ccp_connection *conn, uint32_t factor) {
 	tcp_stream *stream;
 	get_stream_from_ccp(&stream, conn);
-	// TODO: __dp_set_rate_abs(dp, conn, stream->sndvar->pacing_rate * (factor / 100));
-	TRACE_ERROR("set_rate_rel not yet implemented!\n")
+    stream->bucket->rate *= (factor / 100);
 }
 
 int _dp_send_msg(struct ccp_datapath *dp, struct ccp_connection *conn, char *msg, int msg_size) {
@@ -145,7 +151,6 @@ void setup_ccp_connection(mtcp_manager_t mtcp) {
 		.impl = mtcp
 	};
 
-
 	if (ccp_init(&dp) < 0) {
 		TRACE_ERROR("failed to initialize ccp connection map\n");
 		exit(-1);
@@ -177,14 +182,17 @@ void ccp_create(mtcp_manager_t mtcp, tcp_stream *stream) {
 	} else {
 		TRACE_CCP("ccp.create(%d)\n", dp->index);
 	}
+
 }
+
+uint32_t last_drop_t = 0;
 
 void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream, 
 		uint32_t ack, uint32_t rtt,
 		uint64_t bytes_delivered, uint64_t packets_delivered)
 {
-	uint64_t rin  = bytes_delivered * S_TO_US,  // TODO:CCP divide by snd_int_us
-		     rout = bytes_delivered * S_TO_US;  // TODO:CCP divide by rcv_int_us
+	uint64_t rin  = bytes_delivered, //* S_TO_US,  // TODO:CCP divide by snd_int_us
+		     rout = bytes_delivered; // * S_TO_US;  // TODO:CCP divide by rcv_int_us
 	struct ccp_connection *conn = stream->ccp_conn;
 	struct ccp_primitives *mmt = &conn->prims;
 
@@ -196,6 +204,19 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream,
 	mmt->packets_in_flight = 0; // TODO
 	mmt->rate_outgoing     = rin;
 	mmt->rate_incoming     = rout;
+#if TCP_OPT_SACK_ENABLED
+    mmt->bytes_misordered   = stream->rcvvar->sacked_pkts * 1448;
+    mmt->packets_misordered = stream->rcvvar->sacked_pkts;
+#endif
+
+    /*
+    if (last_drop_t == 0 || _dp_since_usecs(last_drop_t) > 25000) {
+        mmt->lost_pkts_sample = 0;
+        last_drop_t = _dp_now();
+    }
+    */
+
+    //fprintf(stderr, "mmt: %u %u\n", conn->prims.packets_misordered, conn->prims.lost_pkts_sample);
 
 	if (conn != NULL) {
 		ccp_invoke(conn);
@@ -203,22 +224,40 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream,
         conn->prims.bytes_misordered   = 0;
         conn->prims.packets_misordered = 0;
         conn->prims.lost_pkts_sample   = 0;
+#if TCP_OPT_SACK_ENABLED
+        stream->rcvvar->sacked_pkts    = 0;
+#endif
 	} else {
 		TRACE_ERROR("ccp_connection not initialized\n")
 	}
 }
 
+uint32_t last_tri_dupack_seq = 0;
+
 void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uint32_t val) {
+    unsigned long now = (unsigned long)(_dp_now());
 
     switch(event_type) {
         case RECORD_NONE:
             return;
         case RECORD_DUPACK:
-            stream->ccp_conn->prims.bytes_misordered += stream->sndvar->mss;
+            //fprintf(stderr, "DUPACK!\n");
+#if TCP_OPT_SACK_ENABLED
+#else
+            stream->ccp_conn->prims.bytes_misordered += val;//stream->sndvar->mss;
             stream->ccp_conn->prims.packets_misordered++;
+#endif
             break;
         case RECORD_TRI_DUPACK:
-            stream->ccp_conn->prims.lost_pkts_sample++;
+            fprintf(stderr, "%lu tridup ack=%d\n", 
+                    now / 1000,
+                    val - stream->sndvar->iss
+            );
+            //fprintf(stderr, "TRI DUPACK!\n");
+            if (last_tri_dupack_seq != val) {
+                stream->ccp_conn->prims.lost_pkts_sample++;
+                last_tri_dupack_seq = val;
+            }
             break;
         case RECORD_TIMEOUT:
             //printf("timeout!\n");
