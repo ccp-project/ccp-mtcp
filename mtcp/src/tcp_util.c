@@ -60,7 +60,7 @@ ParseTCPOptions(tcp_stream *cur_stream,
 /*---------------------------------------------------------------------------*/
 inline int  
 ParseTCPTimestamp(tcp_stream *cur_stream, 
-		struct tcp_timestamp *ts, uint8_t *tcpopt, int len)
+		 struct tcp_timestamp *ts, uint8_t *tcpopt, int len)
 {
 	int i;
 	unsigned int opt, optlen;
@@ -91,25 +91,16 @@ ParseTCPTimestamp(tcp_stream *cur_stream,
 	return FALSE;
 }
 #if TCP_OPT_SACK_ENABLED
-uint32_t walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t right_edge) {
-	uint8_t i, j;
+void walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t right_edge) {
+    uint8_t i, j;
     uint32_t newly_sacked = 0;
     long int ld, rd, lrd, rld;
-    //fprintf(stderr, "[");
     for (i=0; i < MAX_SACK_ENTRY; i++) {
-        ld = left_edge - cur_stream->rcvvar->sack_table[i].left_edge;
-        rd = right_edge - cur_stream->rcvvar->sack_table[i].right_edge;
-        /*
-        fprintf(stderr, "%u:%ld/%u:%ld", 
-                cur_stream->rcvvar->sack_table[i].left_edge - cur_stream->sndvar->iss, 
-                ld,
-                cur_stream->rcvvar->sack_table[i].right_edge - cur_stream->sndvar->iss,
-                rd
-        );
-        */
+        ld = (long int) left_edge - cur_stream->rcvvar->sack_table[i].left_edge;
+        rd = (long int) right_edge - cur_stream->rcvvar->sack_table[i].right_edge;
         // if block already in table, don't need to do anything
         if (ld == 0 && rd == 0) { 
-            return 0;
+            return;
         }
 
         lrd = (long int) left_edge - cur_stream->rcvvar->sack_table[i].right_edge;
@@ -117,24 +108,14 @@ uint32_t walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t ri
 
         // if block does not overlap i at all, skip
         if (lrd > 0 || rld < 0) {
-            //fprintf(stderr, "* ");//%ld/%ld ", lrd, rld);
             continue;
         }
-        // fprintf(stderr, " ");
-
-
-
-        // this block overlaps i 
-        /*
-        fprintf(stderr,"[over|%u:%ld|%u:%ld]", 
-                cur_stream->rcvvar->sack_table[i].left_edge - cur_stream->sndvar->iss, 
-                (-ld),
-                cur_stream->rcvvar->sack_table[i].right_edge - cur_stream->sndvar->iss,
-                (rd));
-        */
  
+        // left_edge is further left than i.left_edge
         if (ld < 0) {
-            newly_sacked += (-((long int)ld));
+            newly_sacked += (-ld);
+            // expand i to account for this extra space, and merge with any
+            // blocks whose right_edge = i.left (i.e. blocks are touching_
             cur_stream->rcvvar->sack_table[i].left_edge = left_edge;
             for (j=0; j < MAX_SACK_ENTRY; j++) {
                 if (cur_stream->rcvvar->sack_table[j].right_edge == left_edge) {
@@ -145,8 +126,11 @@ uint32_t walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t ri
                 }
             }
         }
+        // right edge is further right than i.right_edge
         if (rd > 0) {
             newly_sacked += (rd);
+            // expand i to account for this extra space, and merge with any
+            // blocks whose left_edge = i.right (i.e. blocks are touching)
             cur_stream->rcvvar->sack_table[i].right_edge = right_edge;
             for (j=0; j < MAX_SACK_ENTRY; j++) {
                 if (cur_stream->rcvvar->sack_table[j].left_edge == right_edge) {
@@ -157,83 +141,80 @@ uint32_t walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t ri
                 }
             }
         }
+    }
+    if (newly_sacked == 0) {
+        cur_stream->rcvvar->sack_table
+                [cur_stream->rcvvar->sacks].left_edge = left_edge;
+        cur_stream->rcvvar->sack_table
+                [cur_stream->rcvvar->sacks].right_edge = right_edge;
+        cur_stream->rcvvar->sacks++;
+        newly_sacked = (right_edge - left_edge);
+    }
 
-    }
-    if (newly_sacked > 0) {
-        return 0;
-    } else {
-        fprintf(stderr, "%u", right_edge - left_edge);
-        return 1;
-    }
+    //fprintf(stderr, "SACK (%u,%u)->%u/%u\n", left_edge, right_edge, newly_sacked, newly_sacked / 1448);
+    cur_stream->rcvvar->sacked_pkts += (newly_sacked / 1448);
+
+    return;
 }
 
 /*----------------------------------------------------------------------------*/
 void 
 ParseSACKOption(tcp_stream *cur_stream, 
-		uint32_t ack_seq, uint8_t *tcpopt, int len)
+                uint32_t ack_seq,
+                uint8_t *tcpopt,
+                int len)
 {
-	int i, j, should_add;
+	int i, j;
 	unsigned int opt, optlen;
 	uint32_t left_edge, right_edge;
 
 	for (i = 0; i < len; ) {
-		opt = *(tcpopt + i++);
-		
-		if (opt == TCP_OPT_END) {	// end of option field
-			break;
-		} else if (opt == TCP_OPT_NOP) {	// no option
-			continue;
-		} else {
-			optlen = *(tcpopt + i++);
-			if (i + optlen - 2 > len) {
-				break;
-			}
+            opt = *(tcpopt + i++);
+            
+            if (opt == TCP_OPT_END) {	// end of option field
+                break;
+            } else if (opt == TCP_OPT_NOP) {	// no option
+                continue;
+            } else {
+                optlen = *(tcpopt + i++);
+                if (i + optlen - 2 > len) {
+                    break;
+                }
 
+                if (opt == TCP_OPT_SACK) {
+                    j = 0;
+                    while (j < optlen - 2) {
+                        left_edge = ntohl(*(uint32_t *)(tcpopt + i + j));
+                        right_edge = ntohl(*(uint32_t *)(tcpopt + i + j + 4));
 
-			if (opt == TCP_OPT_SACK) {
-				j = 0;
-                fprintf(stderr, "SACK\t\t");
-				while (j < optlen - 2) {
-					left_edge = ntohl(*(uint32_t *)(tcpopt + i + j));
-					right_edge = ntohl(*(uint32_t *)(tcpopt + i + j + 4));
+                        walk_sack_table(cur_stream, left_edge, right_edge);
 
-                    should_add = walk_sack_table(cur_stream, left_edge, right_edge);
+                        j += 8;
+#if RTM_STAT
+                        cur_stream->rstat->sack_cnt++;
+                        cur_stream->rstat->sack_bytes += (right_edge - left_edge);
+#endif
+                        if (cur_stream->rcvvar->dup_acks == 3) {
+#if RTM_STAT
+                            cur_stream->rstat->tdp_sack_cnt++;
+                            cur_stream->
+                                    rstat->tdp_sack_bytes += (right_edge - left_edge);
+#endif
+                            TRACE_LOSS("SACK entry. "
+                                        "left_edge: %u, right_edge: %u (ack_seq: %u)\n",
+                                        left_edge, right_edge, ack_seq);
 
-                    if (should_add > 0) { 
-                        fprintf(stderr, "<-(%u,%u)\t\t", left_edge-cur_stream->sndvar->iss, right_edge-cur_stream->sndvar->iss);
-					cur_stream->rcvvar->sack_table
-							[cur_stream->rcvvar->sacks].left_edge = left_edge;
-					cur_stream->rcvvar->sack_table
-							[cur_stream->rcvvar->sacks].right_edge = right_edge;
-					cur_stream->rcvvar->sacks++;
+                        }
+                        TRACE_SACK("Found SACK entry. "
+                                    "left_edge: %u, right_edge: %u\n", 
+                                    left_edge, right_edge);
                     }
-					j += 8;
-#if RTM_STAT
-					cur_stream->rstat->sack_cnt++;
-					cur_stream->rstat->sack_bytes += (right_edge - left_edge);
-#endif
-					if (cur_stream->rcvvar->dup_acks == 3) {
-#if RTM_STAT
-						cur_stream->rstat->tdp_sack_cnt++;
-						cur_stream->
-							rstat->tdp_sack_bytes += (right_edge - left_edge);
-#endif
-						TRACE_LOSS("SACK entry. "
-								"left_edge: %u, right_edge: %u (ack_seq: %u)\n",
-								left_edge, right_edge, ack_seq);
-
-					}
-					TRACE_SACK("Found SACK entry. "
-							"left_edge: %u, right_edge: %u\n", 
-							left_edge, right_edge);
-				}
-				i += j;
-                fprintf(stderr, "ack=%u\n", ack_seq);
-			} else {
-				// not handle
-				i += optlen - 2;
-			}
-		}
+                    i += j;
+                } else {
+                    // not handle
+                    i += optlen - 2;
+                }
+            }
 	}
 }
 #endif /* TCP_OPT_SACK_ENABLED */
