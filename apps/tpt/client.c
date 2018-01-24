@@ -50,7 +50,7 @@
 #endif
 
 #define CONCURRENCY 1
-#define BUF_LEN 8192
+#define BUF_LEN 8192 * 2
 #define MAX_FLOW_NUM (10000)
 #define MAX_EVENTS (30000)
 
