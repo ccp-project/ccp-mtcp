@@ -15,7 +15,7 @@
  ****************************************************************************/
 uint64_t init_time_ns = 0;
 uint32_t last_print = 0;
-#define SAMPLE_FREQ_US 100000
+#define SAMPLE_FREQ_US 1000
 
 uint32_t _dp_now() {
     struct timespec now;
@@ -219,19 +219,24 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream,
     //fprintf(stderr, "mmt: %u %u\n", conn->prims.packets_misordered, conn->prims.lost_pkts_sample);
 
 	if (conn != NULL) {
-		ccp_invoke(conn);
-		conn->prims.was_timeout        = false;
-        conn->prims.bytes_misordered   = 0;
-        conn->prims.packets_misordered = 0;
-        conn->prims.lost_pkts_sample   = 0;
+            //fprintf(stderr, " lost_pkts=%u\n", mmt->lost_pkts_sample);
+            ccp_invoke(conn);
+            conn->prims.was_timeout        = false;
+            conn->prims.bytes_misordered   = 0;
+            conn->prims.packets_misordered = 0;
+            conn->prims.lost_pkts_sample   = 0;
 #if TCP_OPT_SACK_ENABLED
-        stream->rcvvar->sacked_pkts    = 0;
+            stream->rcvvar->sacked_pkts    = 0;
 #endif
 	} else {
 		TRACE_ERROR("ccp_connection not initialized\n")
 	}
 }
 
+#if TCP_OPT_SACK_ENABLED
+//uint32_t window_edge_at_last_loss = 0;
+uint32_t last_loss = 0;
+#endif
 uint32_t last_tri_dupack_seq = 0;
 
 void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uint32_t val) {
@@ -241,26 +246,38 @@ void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uin
         case RECORD_NONE:
             return;
         case RECORD_DUPACK:
-            //fprintf(stderr, "DUPACK!\n");
 #if TCP_OPT_SACK_ENABLED
 #else
-            stream->ccp_conn->prims.bytes_misordered += val;//stream->sndvar->mss;
+            // use num dupacks as a proxy for sacked
+            stream->ccp_conn->prims.bytes_misordered += val;
             stream->ccp_conn->prims.packets_misordered++;
 #endif
             break;
         case RECORD_TRI_DUPACK:
-            fprintf(stderr, "%lu tridup ack=%d\n", 
-                    now / 1000,
-                    val - stream->sndvar->iss
-            );
-            //fprintf(stderr, "TRI DUPACK!\n");
+#if TCP_OPT_SACK_ENABLED
+            if (last_tri_dupack_seq == 0 || val > stream->rcvvar->sack_right_edge) { //  && _dp_since_usecs(last_loss) > 500000) {
+                fprintf(stderr, "%lu tridup ack=%u\n", 
+                        now / 1000,
+                        val
+                );
+                last_tri_dupack_seq = val;
+                last_loss = _dp_now();
+                stream->ccp_conn->prims.lost_pkts_sample++;
+            }
+#else
+            // only count as a loss if we haven't already seen 3 dupacks for
+            // this seq number
             if (last_tri_dupack_seq != val) {
+                fprintf(stderr, "%lu tridup ack=%d\n", 
+                        now / 1000,
+                        val// - stream->sndvar->iss
+                );
                 stream->ccp_conn->prims.lost_pkts_sample++;
                 last_tri_dupack_seq = val;
             }
+#endif
             break;
         case RECORD_TIMEOUT:
-            //printf("timeout!\n");
             //stream->ccp_conn->prims.was_timeout = true;
             break;
         case RECORD_ECN:

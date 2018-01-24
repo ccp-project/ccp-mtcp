@@ -451,6 +451,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	}
 
 #if TCP_OPT_SACK_ENABLED
+        //fprintf(stderr, "ack_seq=%u ", ack_seq);
 	ParseSACKOption(cur_stream, ack_seq, (uint8_t *)tcph + TCP_HEADER_LEN, 
 			(tcph->doff << 2) - TCP_HEADER_LEN);
 #endif /* TCP_OPT_SACK_ENABLED */
@@ -471,22 +472,32 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	}
 #endif
 
+	rmlen = ack_seq - sndvar->sndbuf->head_seq;
+        uint16_t packets;
+        /* If acks new data */
+        packets = rmlen / sndvar->eff_mss;
+        if ((rmlen / sndvar->eff_mss) * sndvar->eff_mss > rmlen) {
+                packets++;
+        }
+
+        log_cwnd_rtt(cur_stream);
+#if USE_CCP
+        // TODO:CCP rmlen does not account for rtx!
+        // uint32_t mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd;
+        ccp_cong_control(mtcp, cur_stream, 
+                        ack_seq,
+                        cur_stream->rcvvar->srtt,
+                        rmlen, packets);
+#endif
+
 	/* If ack_seq is previously acked, return */
 	if (TCP_SEQ_GEQ(sndvar->sndbuf->head_seq, ack_seq)) {
 		return;
 	}
 
 	/* Remove acked sequence from send buffer */
-	rmlen = ack_seq - sndvar->sndbuf->head_seq;
 	if (rmlen > 0) {
 		/* Routine goes here only if there is new payload (not retransmitted) */
-		uint16_t packets;
-
-		/* If acks new data */
-		packets = rmlen / sndvar->eff_mss;
-		if ((rmlen / sndvar->eff_mss) * sndvar->eff_mss > rmlen) {
-			packets++;
-		}
 		
 		/* Estimate RTT and calculate rto */
 		if (cur_stream->saw_timestamp) {
@@ -549,16 +560,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		SBUF_UNLOCK(&sndvar->write_lock);
 		UpdateRetransmissionTimer(mtcp, cur_stream, cur_ts);
 
-        log_cwnd_rtt(cur_stream);
 
-#if USE_CCP
-		// TODO:CCP rmlen does not account for rtx!
-		// uint32_t mrtt = cur_ts - cur_stream->rcvvar->ts_lastack_rcvd;
-		ccp_cong_control(mtcp, cur_stream, 
-				ack_seq,
-				cur_stream->rcvvar->srtt,
-				rmlen, packets);
-#endif
 	}
 
 	UNUSED(ret);

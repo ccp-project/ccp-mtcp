@@ -6,6 +6,7 @@
 #include "debug.h"
 #include "timer.h"
 #include "ip_in.h"
+#include "ccp.h"
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
@@ -152,6 +153,8 @@ void walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t right_
     }
 
     //fprintf(stderr, "SACK (%u,%u)->%u/%u\n", left_edge, right_edge, newly_sacked, newly_sacked / 1448);
+    // fprintf(stderr, "newly_sacked=%u ", (newly_sacked / 1448));
+    fprintf(stderr, "=%u", newly_sacked);
     cur_stream->rcvvar->sacked_pkts += (newly_sacked / 1448);
 
     return;
@@ -183,11 +186,14 @@ ParseSACKOption(tcp_stream *cur_stream,
 
                 if (opt == TCP_OPT_SACK) {
                     j = 0;
+                    fprintf(stderr, "sacked=[");
                     while (j < optlen - 2) {
                         left_edge = ntohl(*(uint32_t *)(tcpopt + i + j));
                         right_edge = ntohl(*(uint32_t *)(tcpopt + i + j + 4));
 
+                        fprintf(stderr, "(%u,%u)", left_edge, right_edge);
                         walk_sack_table(cur_stream, left_edge, right_edge);
+                        fprintf(stderr, " ");
 
                         j += 8;
 #if RTM_STAT
@@ -210,6 +216,13 @@ ParseSACKOption(tcp_stream *cur_stream,
                                     left_edge, right_edge);
                     }
                     i += j;
+                    for (i=0; i < MAX_SACK_ENTRY; i++) {
+                        cur_stream->rcvvar->sack_right_edge = MAX(
+                            cur_stream->rcvvar->sack_right_edge,
+                            cur_stream->rcvvar->sack_table[i].right_edge
+                        );
+                    }
+                    fprintf(stderr, "] edge=%u\n", cur_stream->rcvvar->sack_right_edge);
                 } else {
                     // not handle
                     i += optlen - 2;

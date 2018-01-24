@@ -372,6 +372,7 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 
 #if USE_CCP
         stream->bucket = NewTokenBucket();
+        stream->rcvvar->sack_right_edge = 0;
 	ccp_create(mtcp, stream);
 #endif
 

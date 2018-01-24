@@ -45,7 +45,6 @@ struct tcp_recv_vars
 	/* variables for fast retransmission */
 	uint8_t dup_acks;		/* number of duplicated acks */
 	uint32_t last_ack_seq;	/* highest ackd seq */
-        uint32_t sacked_pkts;
 	
 	/* timestamps */
 	uint32_t ts_recent;			/* recent peer timestamp */
@@ -62,6 +61,8 @@ struct tcp_recv_vars
 
 #if TCP_OPT_SACK_ENABLED		/* currently not used */
 #define MAX_SACK_ENTRY 8
+        uint32_t sacked_pkts;
+        uint32_t sack_right_edge;
 	struct sack_entry sack_table[MAX_SACK_ENTRY];
 	uint8_t sacks:3;
 #endif /* TCP_OPT_SACK_ENABLED */
