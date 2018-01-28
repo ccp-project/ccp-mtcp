@@ -184,10 +184,12 @@ typedef struct tcp_stream
 			saw_timestamp:1,	/* whether peer sends timestamp */
 			sack_permit:1,		/* whether peer permits SACK */
 			control_list_waiting:1, 
-			have_reset:1;
+			have_reset:1,
+                        wait_to_send:1;
 	
 	uint32_t snd_nxt;		/* send next */
 	uint32_t rcv_nxt;		/* receive next */
+        uint32_t seq_at_loss;
 
 	struct tcp_recv_vars *rcvvar;
 	struct tcp_send_vars *sndvar;
