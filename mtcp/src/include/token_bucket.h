@@ -4,7 +4,7 @@
 #include "tcp_stream.h"
 
 typedef struct token_bucket {
-    uint64_t tokens;
+    double tokens;
     uint32_t rate;
     uint32_t burst;
     uint32_t last_fill_t;
