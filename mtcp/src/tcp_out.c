@@ -389,6 +389,11 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 	while (1) {
 		seq = cur_stream->snd_nxt;
 
+                if (cur_stream->wait_to_send && TCP_SEQ_GT(cur_stream->snd_nxt, cur_stream->rcvvar->last_ack_seq)) {
+                    fprintf(stderr, "waiting...\n");
+                    goto out;
+                }
+
 		if (TCP_SEQ_LT(seq, sndvar->sndbuf->head_seq)) {
 			TRACE_ERROR("Stream %d: Invalid sequence to send. "
 					"state: %s, seq: %u, head_seq: %u.\n", 

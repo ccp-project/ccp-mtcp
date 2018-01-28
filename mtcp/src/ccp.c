@@ -15,7 +15,7 @@
  ****************************************************************************/
 uint64_t init_time_ns = 0;
 uint32_t last_print = 0;
-#define SAMPLE_FREQ_US 1000
+#define SAMPLE_FREQ_US 50000
 
 uint32_t _dp_now() {
     struct timespec now;
@@ -44,7 +44,7 @@ uint32_t _dp_after_usecs(uint32_t usecs) {
 void log_cwnd_rtt(tcp_stream *stream) {
     unsigned long now = (unsigned long)(_dp_now());
     if (_dp_since_usecs(last_print) > SAMPLE_FREQ_US) {
-        fprintf(stderr, "%lu %d %d %d ", 
+        fprintf(stderr, "%lu %d %d %d\n", 
                 now / 1000, 
                 stream->rcvvar->srtt * 125,
                 stream->sndvar->cwnd / stream->sndvar->mss,
@@ -230,17 +230,19 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream,
 #endif
 	} else {
 		TRACE_ERROR("ccp_connection not initialized\n")
+
 	}
 }
 
 #if TCP_OPT_SACK_ENABLED
-//uint32_t window_edge_at_last_loss = 0;
+uint32_t window_edge_at_last_loss = 0;
 uint32_t last_loss = 0;
 #endif
 uint32_t last_tri_dupack_seq = 0;
 
 void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uint32_t val) {
     unsigned long now = (unsigned long)(_dp_now());
+    int i;
 
     switch(event_type) {
         case RECORD_NONE:
@@ -255,11 +257,17 @@ void ccp_record(mtcp_manager_t mtcp, tcp_stream *stream, uint8_t event_type, uin
             break;
         case RECORD_TRI_DUPACK:
 #if TCP_OPT_SACK_ENABLED
-            if (last_tri_dupack_seq == 0 || val > stream->rcvvar->sack_right_edge) { //  && _dp_since_usecs(last_loss) > 500000) {
+            if (val > window_edge_at_last_loss) {
                 fprintf(stderr, "%lu tridup ack=%u\n", 
                         now / 1000,
-                        val
+                        val - stream->sndvar->iss
                 );
+                for (i=0; i < MAX_SACK_ENTRY; i++) {
+                    window_edge_at_last_loss = MAX(
+                        window_edge_at_last_loss,
+                        stream->rcvvar->sack_table[i].right_edge
+                    );
+                }
                 last_tri_dupack_seq = val;
                 last_loss = _dp_now();
                 stream->ccp_conn->prims.lost_pkts_sample++;

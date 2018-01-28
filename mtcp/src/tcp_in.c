@@ -395,6 +395,10 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		cur_stream->rcvvar->last_ack_seq = ack_seq;
 	}
 
+        if(cur_stream->wait_to_send) {
+            fprintf(stderr, "got ack %u snd_nxt=%u\n", ack_seq - sndvar->iss, cur_stream->snd_nxt - sndvar->iss);
+        }
+
 	/* Fast retransmission */
 	if (dup && cur_stream->rcvvar->dup_acks == 3) {
 		TRACE_LOSS("Triple duplicated ACKs!! ack_seq: %u\n", ack_seq);
@@ -413,7 +417,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 						"ack_seq: %u, snd_una: %u\n", 
 						ack_seq, sndvar->snd_una);
 			}
-			cur_stream->snd_nxt = ack_seq;
+			cur_stream->snd_nxt = ack_seq; 
+                        cur_stream->wait_to_send = TRUE;
+                        cur_stream->seq_at_loss = ack_seq;
 		}
 
 #if USE_CCP
@@ -439,6 +445,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		AddtoSendList(mtcp, cur_stream);
 
 	} else if (cur_stream->rcvvar->dup_acks > 3) {
+            // for every odd dup_ack (FACK), ship a new one 
+            // van jacobsen: accounting trick w
+            // wait for half window to ackowledge then shift to the right side
 #if USE_CCP
 #else
 		/* Inflate congestion window until before overflow */
@@ -458,14 +467,18 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 
 #if RECOVERY_AFTER_LOSS
 	/* updating snd_nxt (when recovered from loss) */
-	if (TCP_SEQ_GT(ack_seq, cur_stream->snd_nxt)) {
+	if (TCP_SEQ_GT(ack_seq, cur_stream->snd_nxt) || 
+            (cur_stream->wait_to_send && TCP_SEQ_GT(ack_seq, cur_stream->seq_at_loss))) {
 #if RTM_STAT
 		sndvar->rstat.ack_upd_cnt++;
 		sndvar->rstat.ack_upd_bytes += (ack_seq - cur_stream->snd_nxt);
 #endif
 		TRACE_LOSS("Updating snd_nxt from %u to %u\n", 
 				cur_stream->snd_nxt, ack_seq);
+                fprintf(stderr, "start sending again, ack_seq=%u sndlen=%u\n", ack_seq - cur_stream->sndvar->iss, sndvar->sndbuf->len);
 		cur_stream->snd_nxt = ack_seq;
+                cur_stream->wait_to_send = FALSE;
+                AddtoSendList(mtcp, cur_stream);
 		if (sndvar->sndbuf->len == 0) {
 			RemoveFromSendList(mtcp, cur_stream);
 		}
