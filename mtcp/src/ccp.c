@@ -15,7 +15,7 @@
  ****************************************************************************/
 uint64_t init_time_ns = 0;
 uint32_t last_print = 0;
-#define SAMPLE_FREQ_US 50000
+#define SAMPLE_FREQ_US 10000
 
 uint32_t _dp_now() {
     struct timespec now;
@@ -54,7 +54,7 @@ void log_cwnd_rtt(tcp_stream *stream) {
                 -1
 #endif
                 );
-        PrintBucket(stream->bucket);
+        //PrintBucket(stream->bucket);
         last_print = now;
     }
 }

@@ -18,6 +18,8 @@
 #define RECOVERY_AFTER_LOSS TRUE
 #define SELECTIVE_WRITE_EVENT_NOTIFY TRUE
 
+#define BETA 0.3
+
 /*----------------------------------------------------------------------------*/
 static inline int 
 FilterSYNPacket(mtcp_manager_t mtcp, uint32_t ip, uint16_t port)
@@ -395,9 +397,11 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		cur_stream->rcvvar->last_ack_seq = ack_seq;
 	}
 
+        /*
         if(cur_stream->wait_to_send) {
             fprintf(stderr, "got ack %u snd_nxt=%u\n", ack_seq - sndvar->iss, cur_stream->snd_nxt - sndvar->iss);
         }
+        */
 
 	/* Fast retransmission */
 	if (dup && cur_stream->rcvvar->dup_acks == 3) {
@@ -420,6 +424,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 			cur_stream->snd_nxt = ack_seq; 
                         cur_stream->wait_to_send = TRUE;
                         cur_stream->seq_at_loss = ack_seq;
+#if FAST_RECOVERY
+                        cur_stream->cwnd = (cur_stream->cwnd * (1 - BETA)) + (3 * sndvar->mss);
+#endif
 		}
 
 #if USE_CCP
@@ -448,6 +455,9 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
             // for every odd dup_ack (FACK), ship a new one 
             // van jacobsen: accounting trick w
             // wait for half window to ackowledge then shift to the right side
+#if FAST_RECOVERY
+            cur_stream->cwnd += sndvar->mss;
+#endif
 #if USE_CCP
 #else
 		/* Inflate congestion window until before overflow */
