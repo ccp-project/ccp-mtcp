@@ -8,6 +8,8 @@
 #include "timer.h"
 #include "debug.h"
 #include "token_bucket.h"
+#include "ccp.h"
+#include "tcp_util.h"
 
 #define TCP_CALCULATE_CHECKSUM      TRUE
 #define ACK_PIGGYBACK				TRUE
@@ -367,6 +369,7 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 	uint32_t window;
 	int packets = 0;
 	uint8_t wack_sent = 0;
+        int packets_sent = 0;
 
 	if (!sndvar->sndbuf) {
 		TRACE_ERROR("Stream %d: No send buffer available.\n", cur_stream->id);
@@ -411,6 +414,7 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 		if (buffered_len == 0)
 			break;
 
+
 		data = sndvar->sndbuf->head + 
 				(seq - sndvar->sndbuf->head_seq);
 
@@ -425,6 +429,11 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 
 		if (len <= 0)
 			break;
+
+                if (seq_is_sacked(cur_stream, seq)) {
+                    cur_stream->snd_nxt += len;
+                    continue;
+                }
 
 		if (cur_stream->state > TCP_ST_ESTABLISHED) {
 			TRACE_FIN("Flushing after ESTABLISHED: seq: %u, len: %u, "
@@ -457,6 +466,10 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
                 }
 #endif
 	
+                if (packets_sent == 0) {
+                    //fprintf(stderr, "%lu flush: ", ((unsigned long)_dp_now()) / 1000);
+                }
+                //fprintf(stderr, "%u | ", seq - cur_stream->sndvar->iss);
 		sndlen = SendTCPPacket(mtcp, cur_stream, cur_ts, 
 				TCP_FLAG_ACK, data, len);
 		if (sndlen < 0) {
@@ -464,12 +477,16 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 			goto out;
 		}
 		packets++;
+                packets_sent++;
 
 		window -= len;
 	}
 
  out:
 	SBUF_UNLOCK(&sndvar->write_lock);
+        if (packets_sent > 0) {
+            //fprintf(stderr, "==> %d\n", packets_sent);
+        }
 	return packets;
 }
 /*----------------------------------------------------------------------------*/

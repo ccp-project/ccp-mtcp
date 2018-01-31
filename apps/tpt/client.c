@@ -286,26 +286,28 @@ end_wait_loop:
         }
         DEBUG("Connection created.");
     }
-    DEBUG("Sending %d bytes...", bytes_to_send);
+
+send_loop:
+        DEBUG("Sending %d bytes...", bytes_to_send);
 
 	// Fill buffer with some data
 	memset(buf, 0x90, sizeof(char) * BUF_LEN);
 	buf[BUF_LEN-1] = '\0';
 
-    int connected = 0;
+        int connected = 0;
 	while (bytes_to_send > 1) {
-		wrote = mtcp_write(ctx->mctx, sockfd, buf,
-                (bytes_to_send < BUF_LEN ? bytes_to_send : BUF_LEN));
-        if (wrote < 0) {
-            //ERROR("write returned %d: %s", wrote, strerror(errno));
-            //return -1;
-        }
-		if (wrote > 0 && connected == 0) {
-			gettimeofday(&t1, NULL); 
-			connected = 1;
-		}
-		bytes_sent += (wrote >= 0 ? wrote : 0);
-		bytes_to_send -= (wrote >= 0 ? wrote : 0);
+            wrote = mtcp_write(ctx->mctx, sockfd, buf, BUF_LEN);
+            //(bytes_to_send < BUF_LEN ? bytes_to_send : BUF_LEN));
+            if (wrote < 0) {
+                //ERROR("write returned %d: %s", wrote, strerror(errno));
+                //return -1;
+            }
+            if (wrote > 0 && connected == 0) {
+                    gettimeofday(&t1, NULL); 
+                    connected = 1;
+            }
+            bytes_sent += (wrote >= 0 ? wrote : 0);
+            bytes_to_send -= (wrote >= 0 ? wrote : 0);
 	}
 
 	// Send done (anything other than 0x90)
@@ -335,7 +337,9 @@ end_wait_loop:
 stop_timer:
 	gettimeofday(&t2, NULL);
 
-	DEBUG("Done reading. Closing socket...");
+	DEBUG("Done reading. Starting over... \n"); //Closing socket...");
+        bytes_to_send = atoi(argv[3]);
+        goto send_loop;
 	mtcp_close(mctx, sockfd);
 	DEBUG("Socket closed.");
 	

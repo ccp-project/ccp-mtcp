@@ -91,7 +91,22 @@ ParseTCPTimestamp(tcp_stream *cur_stream,
 	}
 	return FALSE;
 }
+
 #if TCP_OPT_SACK_ENABLED
+int seq_is_sacked(tcp_stream *cur_stream, uint32_t seq) {
+    uint8_t i;
+    uint32_t left, right;
+    for (i=0; i < MAX_SACK_ENTRY; i++) {
+        left = cur_stream->rcvvar->sack_table[i].left_edge;
+        right = cur_stream->rcvvar->sack_table[i].right_edge;
+        if (seq >= left && seq < right) {
+            fprintf(stderr, "Found seq=%u in (%u,%u)\n", seq - cur_stream->sndvar->iss, left - cur_stream->sndvar->iss, right - cur_stream->sndvar->iss);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 void walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t right_edge) {
     uint8_t i, j;
     uint32_t newly_sacked = 0;
@@ -161,7 +176,7 @@ void walk_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t right_
 }
 
 /*----------------------------------------------------------------------------*/
-void 
+int
 ParseSACKOption(tcp_stream *cur_stream, 
                 uint32_t ack_seq,
                 uint8_t *tcpopt,
@@ -170,6 +185,7 @@ ParseSACKOption(tcp_stream *cur_stream,
 	int i, j;
 	unsigned int opt, optlen;
 	uint32_t left_edge, right_edge;
+        int ret = FALSE;
 
 	for (i = 0; i < len; ) {
             opt = *(tcpopt + i++);
@@ -190,6 +206,7 @@ ParseSACKOption(tcp_stream *cur_stream,
                     while (j < optlen - 2) {
                         left_edge = ntohl(*(uint32_t *)(tcpopt + i + j));
                         right_edge = ntohl(*(uint32_t *)(tcpopt + i + j + 4));
+                        ret = TRUE;
 
                         //fprintf(stderr, "(%u,%u)", left_edge, right_edge);
                         walk_sack_table(cur_stream, left_edge, right_edge);
@@ -223,6 +240,8 @@ ParseSACKOption(tcp_stream *cur_stream,
                 }
             }
 	}
+
+        return ret;
 }
 #endif /* TCP_OPT_SACK_ENABLED */
 /*---------------------------------------------------------------------------*/

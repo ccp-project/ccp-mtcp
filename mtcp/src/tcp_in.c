@@ -315,6 +315,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 	uint32_t right_wnd_edge;
 	uint8_t dup;
 	int ret;
+        int pkt_has_sack;
 
 	//TRACE_PKT("TCP_OPT_MSS mss=%u eff_mss= %u\n", sndvar->mss, sndvar->eff_mss);
 	cwindow = window; // NOTE this is the receive window, specified by sender in TCP pkt hdr
@@ -425,12 +426,12 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
                         cur_stream->wait_to_send = TRUE;
                         cur_stream->seq_at_loss = ack_seq;
 #if FAST_RECOVERY
-                        cur_stream->cwnd = (cur_stream->cwnd * (1 - BETA)) + (3 * sndvar->mss);
+                        cur_stream->cwnd = (cur_stream->sndvar->cwnd * (1 - BETA)) + (3 * sndvar->mss);
 #endif
 		}
 
-#if USE_CCP
-#else
+//#if USE_CCP
+//#else
 		/* update congestion control variables */
 		/* ssthresh to half of min of cwnd and peer wnd */
 		sndvar->ssthresh = MIN(sndvar->cwnd, sndvar->peer_wnd) / 2;
@@ -440,7 +441,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 		sndvar->cwnd = sndvar->ssthresh + 3 * sndvar->mss;
 		TRACE_CONG("Fast retransmission. cwnd: %u, ssthresh: %u\n", 
 				sndvar->cwnd, sndvar->ssthresh);
-#endif
+//#endif
 
 		/* count number of retransmissions */
 		if (sndvar->nrtx < TCP_MAX_RTX) {
@@ -471,21 +472,28 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 
 #if TCP_OPT_SACK_ENABLED
         //fprintf(stderr, "ack_seq=%u ", ack_seq);
-	ParseSACKOption(cur_stream, ack_seq, (uint8_t *)tcph + TCP_HEADER_LEN, 
+	pkt_has_sack = ParseSACKOption(cur_stream, ack_seq, (uint8_t *)tcph + TCP_HEADER_LEN, 
 			(tcph->doff << 2) - TCP_HEADER_LEN);
 #endif /* TCP_OPT_SACK_ENABLED */
 
 #if RECOVERY_AFTER_LOSS
 	/* updating snd_nxt (when recovered from loss) */
-	if (TCP_SEQ_GT(ack_seq, cur_stream->snd_nxt) || 
-            (cur_stream->wait_to_send && TCP_SEQ_GT(ack_seq, cur_stream->seq_at_loss))) {
+	if ((TCP_SEQ_GT(ack_seq, cur_stream->snd_nxt)) || 
+            (cur_stream->wait_to_send && 
+             TCP_SEQ_GT(ack_seq, cur_stream->seq_at_loss) &&
+             cur_stream->rcvvar->sacked_pkts == 0
+             )) {
 #if RTM_STAT
 		sndvar->rstat.ack_upd_cnt++;
 		sndvar->rstat.ack_upd_bytes += (ack_seq - cur_stream->snd_nxt);
 #endif
 		TRACE_LOSS("Updating snd_nxt from %u to %u\n", 
 				cur_stream->snd_nxt, ack_seq);
-                fprintf(stderr, "start sending again, ack_seq=%u sndlen=%u\n", ack_seq - cur_stream->sndvar->iss, sndvar->sndbuf->len);
+                fprintf(stderr, "start sending again, ack_seq=%u seq_at_loss=%u snd_nxt=%u sacked=%u has_sack=%d\n",
+                        ack_seq - cur_stream->sndvar->iss,
+                        cur_stream->seq_at_loss - cur_stream->sndvar->iss,
+                        cur_stream->snd_nxt - cur_stream->sndvar->iss,
+                        cur_stream->rcvvar->sacked_pkts, pkt_has_sack);
 		cur_stream->snd_nxt = ack_seq;
                 cur_stream->wait_to_send = FALSE;
                 AddtoSendList(mtcp, cur_stream);

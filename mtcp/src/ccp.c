@@ -44,7 +44,7 @@ uint32_t _dp_after_usecs(uint32_t usecs) {
 void log_cwnd_rtt(tcp_stream *stream) {
     unsigned long now = (unsigned long)(_dp_now());
     if (_dp_since_usecs(last_print) > SAMPLE_FREQ_US) {
-        fprintf(stderr, "%lu %d %d %d\n", 
+        fprintf(stderr, "%lu %d %d %d ", 
                 now / 1000, 
                 stream->rcvvar->srtt * 125,
                 stream->sndvar->cwnd / stream->sndvar->mss,
@@ -54,7 +54,7 @@ void log_cwnd_rtt(tcp_stream *stream) {
                 -1
 #endif
                 );
-        //PrintBucket(stream->bucket);
+        PrintBucket(stream->bucket);
         last_print = now;
     }
 }
