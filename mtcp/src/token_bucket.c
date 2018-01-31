@@ -5,7 +5,7 @@ token_bucket *NewTokenBucket() {
     token_bucket *bucket;
     bucket = malloc(sizeof(token_bucket));
     bucket->rate = 0;
-    bucket->burst = 28960;
+    bucket->burst = 1000000;// 28960;
     bucket->tokens = bucket->burst;
     bucket->last_fill_t = _dp_now();
     return bucket;
