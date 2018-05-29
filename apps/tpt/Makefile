@@ -57,9 +57,9 @@ LIBS += -m64 -g -O3 -pthread -lrt -march=native -export-dynamic ${MTCP_FLD}/lib/
 endif
 
 # LIBCCP
-LIBCCP=/home/frank/mtcp/mtcp/src/libccp
-LIBS += -L$(LIBCCP) -lccp
-INC += -I$(LIBCCP)
+#LIBCCP=/home/frank/mtcp/mtcp/src/libccp
+#LIBS += -L$(LIBCCP) -lccp
+#INC += -I$(LIBCCP)
 # CCP_OBJ = $(LIBCCP)/ccp.o
 
 all: client

@@ -70,9 +70,9 @@ DPDK_LIB=/home/frank/mtcp/dpdk/lib/
 ifeq ($(DPDK), 1)
 DPDK_MACHINE_FLAGS = $(shell cat /home/frank/mtcp/dpdk/include/cflags.txt)
 INC += ${DPDK_MACHINE_FLAGS} -I${DPDK_INC} -include $(DPDK_INC)/rte_config.h
-LIBCCP_PATH=/home/frank/mtcp/mtcp/src/libccp
-LIBS = -L$(LIBCCP_PATH) -lccp
-INC += -I$(LIBCCP_PATH)
+#LIBCCP_PATH=/home/frank/mtcp/mtcp/src/libccp
+#LIBS = -L$(LIBCCP_PATH) -lccp
+#INC += -I$(LIBCCP_PATH)
 else
 INC += -DDISABLE_DPDK
 endif

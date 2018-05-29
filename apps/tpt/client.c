@@ -288,11 +288,12 @@ end_wait_loop:
     }
     DEBUG("Sending %d bytes...", bytes_to_send);
 
+    int connected = 0;
+//send_loop:
 	// Fill buffer with some data
 	memset(buf, 0x90, sizeof(char) * BUF_LEN);
 	buf[BUF_LEN-1] = '\0';
 
-    int connected = 0;
 	while (bytes_to_send > 1) {
 		wrote = mtcp_write(ctx->mctx, sockfd, buf,
                 (bytes_to_send < BUF_LEN ? bytes_to_send : BUF_LEN));
@@ -336,6 +337,8 @@ stop_timer:
 	gettimeofday(&t2, NULL);
 
 	DEBUG("Done reading. Closing socket...");
+        //bytes_to_send = atoi(argv[3]);
+        //goto send_loop;
 	mtcp_close(mctx, sockfd);
 	DEBUG("Socket closed.");
 	

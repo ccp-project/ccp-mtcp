@@ -54,7 +54,12 @@ void log_cwnd_rtt(tcp_stream *stream) {
                 -1
 #endif
                 );
+#if USE_CCP
         PrintBucket(stream->bucket);
+#else
+        fprintf(stderr, "\n");
+#endif
+
         last_print = now;
     }
 }
