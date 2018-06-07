@@ -1,0 +1,16 @@
+**/*.o
+**/*.d
+apps/apache_benchmark/
+tags
+*/**/tags
+log_*
+**/Makefile
+dpdk-17.08/*
+Makefile.in
+missing
+anstall-sh
+config.h*
+config.log
+config.status
+stamp-h1
+autom4te.cache/**
