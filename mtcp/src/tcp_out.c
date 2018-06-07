@@ -462,10 +462,11 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 	uint8_t *data;
 	uint32_t pkt_len;
 	uint32_t len;
-	uint32_t seq;
+	uint32_t seq = 0;
 	int remaining_window;
 	int sndlen;
 	int packets = 0;
+	int packets_sent = 0;
 	uint8_t wack_sent = 0;
 	
 	if (!sndvar->sndbuf) {
@@ -485,6 +486,11 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 		seq = cur_stream->snd_nxt;
 		data = sndvar->sndbuf->head + (seq - sndvar->sndbuf->head_seq);
 		len = sndvar->sndbuf->len - (seq - sndvar->sndbuf->head_seq);
+
+		// Without this, mm continually drops packets (not sure why, bursting?), mtcp sees lots of losses, throughput dies 
+		if(cur_stream->wait_for_acks && TCP_SEQ_GT(cur_stream->snd_nxt, cur_stream->rcvvar->last_ack_seq)) {
+			goto out;
+		}
 		
 		/* sanity check */
 		if (TCP_SEQ_LT(seq, sndvar->sndbuf->head_seq)) {
@@ -547,10 +553,14 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 			goto out;
 		}
 		packets++;
+		packets_sent++;
 	}
 
  out:
 	SBUF_UNLOCK(&sndvar->write_lock);	
+	if (packets_sent > 0 && seq != 0) {
+		//fprintf(stderr, "wrote %d packets, up to %u\n", packets_sent, seq-sndvar->iss);
+	}
 	return packets;	
 #endif
 }
