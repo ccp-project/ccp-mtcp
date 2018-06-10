@@ -8,6 +8,9 @@
 #include "ip_out.h"
 #include "timer.h"
 #include "debug.h"
+#if RATE_LIMIT_ENABLED
+#include "pacing.h"
+#endif
 
 #define TCP_MAX_SEQ 4294967295
 
@@ -366,6 +369,10 @@ DestroyTCPStream(mtcp_manager_t mtcp, tcp_stream *stream)
 			sa[0], sa[1], sa[2], sa[3], ntohs(stream->sport), 
 			da[0], da[1], da[2], da[3], ntohs(stream->dport), 
 			close_reason_str[stream->close_reason]);
+
+#if RATE_LIMIT_ENABLED
+	stream->bucket = NewTokenBucket();
+#endif
 
 	if (stream->sndvar->sndbuf) {
 		TRACE_FSTAT("Stream %d: send buffer "

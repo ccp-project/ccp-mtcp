@@ -44,6 +44,7 @@
 
 #define TCP_OPT_TIMESTAMP_ENABLED   TRUE	/* enabled for rtt measure */
 #define TCP_OPT_SACK_ENABLED        FALSE	/* not implemented */
+#define RATE_LIMIT_ENABLED          TRUE
 
 #define LOCK_STREAM_QUEUE	FALSE
 #define USE_SPIN_LOCK		TRUE
