@@ -8,7 +8,7 @@
 #include "ip_out.h"
 #include "timer.h"
 #include "debug.h"
-#if RATE_LIMIT_ENABLED
+#if RATE_LIMIT_ENABLED || PACING_ENABLED
 #include "pacing.h"
 #endif
 
@@ -339,6 +339,13 @@ CreateTCPStream(mtcp_manager_t mtcp, socket_map_t socket, int type,
 			da[0], da[1], da[2], da[3], ntohs(stream->dport), 
 			stream->sndvar->iss);
 
+#if RATE_LIMIT_ENABLED
+	stream->bucket = NewTokenBucket();
+#endif
+#if PACING_ENABLED
+        stream->pacer = NewPacketPacer();
+#endif
+
 	UNUSED(da);
 	UNUSED(sa);
 	return stream;
@@ -369,10 +376,6 @@ DestroyTCPStream(mtcp_manager_t mtcp, tcp_stream *stream)
 			sa[0], sa[1], sa[2], sa[3], ntohs(stream->sport), 
 			da[0], da[1], da[2], da[3], ntohs(stream->dport), 
 			close_reason_str[stream->close_reason]);
-
-#if RATE_LIMIT_ENABLED
-	stream->bucket = NewTokenBucket();
-#endif
 
 	if (stream->sndvar->sndbuf) {
 		TRACE_FSTAT("Stream %d: send buffer "

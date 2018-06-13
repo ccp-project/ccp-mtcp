@@ -28,7 +28,8 @@ uint64_t time_after_usecs(uint64_t usecs) {
 
 #define SAMPLE_FREQ_US 10000
 
-void log_cwnd_rtt(tcp_stream *stream) {
+void log_cwnd_rtt(void *vs) {
+    tcp_stream *stream = (tcp_stream *)vs;
     unsigned long now = (unsigned long)(now_usecs());
     if (time_since_usecs(last_print) > SAMPLE_FREQ_US) {
         fprintf(stderr, "%lu %d %d/%d\n", 
@@ -37,6 +38,12 @@ void log_cwnd_rtt(tcp_stream *stream) {
                 stream->sndvar->cwnd / stream->sndvar->mss,
                 stream->sndvar->peer_wnd / stream->sndvar->mss
                 );
+#if RATE_LIMIT_ENABLED
+        PrintBucket(stream->bucket);
+#endif
+#if PACING_ENABLED
+        PrintPacer(stream->pacer);
+#endif
         last_print = now;
     }
 }
