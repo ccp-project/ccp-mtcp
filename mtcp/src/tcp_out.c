@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include "tcp_out.h"
+#include "tcp_util.h"
 #include "mtcp.h"
 #include "ip_out.h"
 #include "tcp_in.h"
@@ -523,7 +524,14 @@ FlushTCPSendingBuffer(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_
 		if (len == 0)
 			break;
 
-		//sndvar->cwnd = (200 * sndvar->mss);
+#if TCP_OPT_SACK_ENABLED
+		if (SeqIsSacked(cur_stream, seq)) {
+			//fprintf(stderr, "!! SKIPPING %u\n", seq - sndvar->iss);
+			cur_stream->snd_nxt += len;
+			continue;
+		}
+#endif
+
 		remaining_window = MIN(sndvar->cwnd, sndvar->peer_wnd)
 			               - (seq - sndvar->snd_una);
 		/* if there is no space in the window */
