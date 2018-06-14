@@ -56,22 +56,21 @@ else
 LIBS += -m64 -g -O3 -pthread -lrt -march=native -export-dynamic ${MTCP_FLD}/lib/libmtcp.a -L../../dpdk/lib -lnuma -lmtcp -lpthread -lrt -ldl ${DPDK_LIB_FLAGS}
 endif
 
+
 # LIBCCP
-#LIBCCP=/home/frank/mtcp/mtcp/src/libccp
-#LIBS += -L$(LIBCCP) -lccp
-#INC += -I$(LIBCCP)
-# CCP_OBJ = $(LIBCCP)/ccp.o
+LIBCCP=/home/frank/mtcp/mtcp/src/libccp
+LIBS += -L$(LIBCCP) -lccp
+INC += -I$(LIBCCP)
 
 all: client
 
 client.o: client.c
 	$(MSG) "   CC $<"
-	$(HIDE) ${CC} -g -c $< ${CFLAGS} ${INC}
-	echo ${INC}
+	${CC} -g -c $< ${CFLAGS} ${INC}
 
 client: client.o
 	$(MSG) "   LD $<"
-	$(HIDE) ${CC} $< ${INC} ${LIBS} ${UTIL_OBJ} -g -o $@
+	${CC} $< ${INC} ${UTIL_OBJ} -g -o $@ ${LIBS} 
 
 clean:
 	rm -f *~ *.o ${TARGETS} log_*
