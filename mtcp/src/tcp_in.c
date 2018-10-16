@@ -429,9 +429,10 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 						"ack_seq: %u, snd_una: %u\n", 
 						ack_seq, sndvar->snd_una);
 			}
-			cur_stream->snd_nxt = ack_seq;
-            cur_stream->wait_for_acks = TRUE;
-            cur_stream->seq_at_last_loss = ack_seq;
+			//cur_stream->snd_nxt = ack_seq;
+            //cur_stream->wait_for_acks = TRUE;
+            //cur_stream->seq_at_last_loss = ack_seq;
+            sndvar->missing_seq = ack_seq;
 		}
 
 		/* update congestion control variables */
@@ -483,6 +484,7 @@ ProcessACK(mtcp_manager_t mtcp, tcp_stream *cur_stream, uint32_t cur_ts,
 #endif
                 TRACE_LOSS("Updating snd_nxt from %u to %u\n", cur_stream->snd_nxt, ack_seq);
                 cur_stream->wait_for_acks = FALSE;
+                // TODO comment this out?
                 cur_stream->snd_nxt = ack_seq;
                 cur_stream->sndvar->cwnd = cur_stream->sndvar->ssthresh;
                 DBG(stderr, "sending again..., ack_seq=%u sndlen=%u cwnd=%u\n", ack_seq-sndvar->iss, sndvar->sndbuf->len, sndvar->cwnd / sndvar->mss);
