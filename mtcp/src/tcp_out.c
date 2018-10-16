@@ -128,7 +128,8 @@ GenerateTCPOptions(tcp_stream *cur_stream, uint32_t cur_ts,
 
 #if TCP_OPT_SACK_ENABLED
 		if (flags & TCP_OPT_SACK) {
-			// TODO: implement SACK support
+			// if there is something to sack...
+			// i += GenerateSACKOption(cur_stream, tcpopt + i);
 		}
 #endif
 	}

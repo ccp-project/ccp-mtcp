@@ -17,9 +17,14 @@ token_bucket *NewTokenBucket() {
 
 void _refill_bucket(token_bucket *bucket) {
     uint32_t elapsed = time_since_usecs(bucket->last_fill_t);
-    double new_tokens = (bucket->rate / 1000000) * elapsed;
+    double new_tokens = (bucket->rate / 1000000.0) * elapsed;
+    double prev_tokens = bucket->tokens;
     bucket->tokens = MIN(bucket->burst, bucket->tokens + new_tokens);
-    bucket->last_fill_t = now_usecs();
+    if (bucket->tokens > prev_tokens) {
+        bucket->last_fill_t = now_usecs();
+    } else {
+        //fprintf(stderr, "elapsed=%lu new=%f\n", time_since_usecs(bucket->last_fill_t), new_tokens);
+    }
 }
 
 int SufficientTokens(token_bucket *bucket, uint64_t new_bits) {
@@ -33,6 +38,9 @@ int SufficientTokens(token_bucket *bucket, uint64_t new_bits) {
         bucket->tokens -= new_bytes;
         return 0;
     }
+
+    //fprintf(stderr, "%lu OUTOFTOKENS ", now_usecs());
+    //PrintBucket(bucket);
     return -1;
 }
 

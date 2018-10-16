@@ -172,6 +172,11 @@ void _update_sack_table(tcp_stream *cur_stream, uint32_t left_edge, uint32_t rig
     return;
 }
 
+int GenerateSACKOption(tcp_stream *cur_stream, uint8_t *tcpopt) {
+    // TODO
+	return 0;
+}
+
 void
 ParseSACKOption(tcp_stream *cur_stream, 
 		uint32_t ack_seq, uint8_t *tcpopt, int len)

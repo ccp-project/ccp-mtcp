@@ -206,6 +206,8 @@ SetInterfaceInfo(char* dev_name_list)
 				"-n",
 				mem_channels,
 				"--proc-type=auto",
+                                "--log-level=8",
+                                "--log-level=pmd,8",
 				""
 		};
 		const int argc = 6;

@@ -31,6 +31,15 @@ static inline void get_mtcp_from_ccp(
 static void _dp_set_cwnd(struct ccp_datapath *dp, struct ccp_connection *conn, uint32_t cwnd) {
     tcp_stream *stream;
     get_stream_from_ccp(&stream, conn);
+    if (cwnd != stream->sndvar->cwnd) {
+        fprintf(stderr, "%lu %d %d->%d (ss=%d)\n", 
+        now_usecs() / 1000, 
+        stream->rcvvar->srtt * 125,
+        stream->sndvar->cwnd / stream->sndvar->mss,
+        cwnd / stream->sndvar->mss,
+        stream->sndvar->ssthresh / stream->sndvar->mss
+        );
+    }
     stream->sndvar->cwnd = MAX(cwnd, TCP_INIT_CWND * stream->sndvar->mss);
 }
 
@@ -175,7 +184,7 @@ void ccp_cong_control(mtcp_manager_t mtcp, tcp_stream *stream,
     struct ccp_connection *conn = stream->ccp_conn;
     struct ccp_primitives *mmt = &conn->prims;
 
-    log_cwnd_rtt(stream);
+    //log_cwnd_rtt(stream);
 
     mmt->bytes_acked       = bytes_delivered;
     mmt->packets_acked     = packets_delivered;
